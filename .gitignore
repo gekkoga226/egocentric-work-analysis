@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data / Videos (large files)
+data/
+videos/
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Model weights / embeddings
+*.pt
+*.pth
+*.pkl
+*.npy
+*.npz
+
+# Claude Code session cache
+.claude/projects/
