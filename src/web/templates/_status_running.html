@@ -1,0 +1,14 @@
+<div hx-get="/status/{{ job_id }}"
+     hx-trigger="every 2s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     class="status-running">
+  <div class="spinner"></div>
+  <div>
+    <strong>分析中...</strong>
+    {% if stage %}
+    <small class="stage">{{ stage }}</small>
+    {% endif %}
+    <p class="hint">Track: {{ track }} &nbsp;|&nbsp; 完了まで数分かかります</p>
+  </div>
+</div>
