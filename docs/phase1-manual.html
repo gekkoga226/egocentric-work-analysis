@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 1 マニュアル — 一人称視点映像 作業分析システム</title>
+  <style>
+    :root {
+      --blue:    #1e40af;
+      --blue-lt: #3b82f6;
+      --blue-bg: #eff6ff;
+      --green:   #15803d;
+      --green-bg:#f0fdf4;
+      --amber:   #92400e;
+      --amber-bg:#fffbeb;
+      --gray-50: #f9fafb;
+      --gray-100:#f3f4f6;
+      --gray-200:#e5e7eb;
+      --gray-400:#9ca3af;
+      --gray-600:#4b5563;
+      --gray-700:#374151;
+      --gray-800:#1f2937;
+      --gray-900:#111827;
+      --code-bg: #1e293b;
+      --code-fg: #e2e8f0;
+      --track-a: #7c3aed;
+      --track-b: #0891b2;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--gray-800);
+      background: var(--gray-50);
+    }
+
+    /* ── ヘッダー ── */
+    header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 60%, #2563eb 100%);
+      color: #fff;
+      padding: 48px 40px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 30px,
+        rgba(255,255,255,.03) 30px,
+        rgba(255,255,255,.03) 60px
+      );
+    }
+    header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      margin-bottom: 16px;
+    }
+    header h1 { font-size: 28px; font-weight: 700; line-height: 1.3; position: relative; }
+    header p  { margin-top: 10px; opacity: .85; font-size: 14px; position: relative; }
+    header .meta { margin-top: 20px; display: flex; gap: 24px; flex-wrap: wrap; position: relative; }
+    header .meta span {
+      font-size: 12px; opacity: .75;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ── レイアウト ── */
+    .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ── TOC ── */
+    .toc {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .toc h2 { font-size: 13px; font-weight: 700; color: var(--gray-400); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+    .toc ol  { padding-left: 20px; }
+    .toc li  { margin: 4px 0; }
+    .toc a   { color: var(--blue); text-decoration: none; font-size: 14px; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* ── セクション ── */
+    .section {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 32px 36px;
+      margin-bottom: 28px;
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--gray-100);
+    }
+    .section-title .num {
+      width: 32px; height: 32px;
+      background: var(--blue);
+      color: #fff;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .section-title h2 { font-size: 19px; font-weight: 700; color: var(--gray-900); }
+
+    h3 { font-size: 15px; font-weight: 700; color: var(--gray-800); margin: 24px 0 10px; }
+    h4 { font-size: 14px; font-weight: 600; color: var(--gray-700); margin: 16px 0 8px; }
+    p  { color: var(--gray-700); margin-bottom: 10px; }
+
+    /* ── テーブル ── */
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 12px 0; }
+    th {
+      background: var(--gray-100);
+      color: var(--gray-700);
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--gray-200);
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--gray-100);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--gray-50); }
+
+    /* ── コードブロック ── */
+    .code-block {
+      position: relative;
+      margin: 14px 0;
+    }
+    .code-block pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border-radius: 10px;
+      padding: 20px 20px 20px 24px;
+      overflow-x: auto;
+      font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+      font-size: 13.5px;
+      line-height: 1.65;
+    }
+    .code-block .lang-label {
+      position: absolute;
+      top: 10px; right: 48px;
+      font-size: 11px;
+      color: var(--gray-400);
+      font-family: monospace;
+      pointer-events: none;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      color: #cbd5e1;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,.2); color: #fff; }
+    .copy-btn.copied { background: #166534; border-color: #22c55e; color: #86efac; }
+
+    /* ── コメント（コード内） ── */
+    .c  { color: #64748b; }
+    .kw { color: #93c5fd; }
+    .st { color: #86efac; }
+    .op { color: #f9a8d4; }
+    .nm { color: #fde68a; }
+
+    /* ── バッジ ── */
+    .badge-a { display: inline-flex; align-items: center; gap: 5px; background: #f5f3ff; color: var(--track-a); border: 1px solid #ddd6fe; border-radius: 6px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+    .badge-b { display: inline-flex; align-items: center; gap: 5px; background: #ecfeff; color: var(--track-b); border: 1px solid #a5f3fc; border-radius: 6px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+    .badge-ok{ display: inline-flex; align-items: center; gap: 5px; background: var(--green-bg); color: var(--green); border: 1px solid #bbf7d0; border-radius: 6px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+
+    /* ── 情報ボックス ── */
+    .info-box {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 14px;
+      display: flex;
+      gap: 10px;
+    }
+    .info-box.blue   { background: var(--blue-bg);  border-left: 4px solid var(--blue-lt);  color: #1e3a8a; }
+    .info-box.green  { background: var(--green-bg); border-left: 4px solid #4ade80; color: #14532d; }
+    .info-box.amber  { background: var(--amber-bg); border-left: 4px solid #fbbf24; color: var(--amber); }
+    .info-box .icon  { flex-shrink: 0; font-size: 16px; line-height: 1.7; }
+
+    /* ── 検証ポイントカード ── */
+    .verify-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+    @media(max-width:680px){ .verify-grid { grid-template-columns: 1fr; } }
+    .verify-card {
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .verify-card h4 { margin: 0 0 8px; font-size: 13px; color: var(--gray-500); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .verify-card ul { padding-left: 18px; }
+    .verify-card li { font-size: 13.5px; color: var(--gray-700); margin: 3px 0; }
+
+    /* ── パイプライン図 ── */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 16px 0;
+    }
+    .pipeline .step {
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+      white-space: nowrap;
+    }
+    .pipeline .arrow { color: var(--gray-400); font-size: 16px; }
+    .pipeline.track-a .step { background: #f5f3ff; border-color: #ddd6fe; color: var(--track-a); }
+    .pipeline.track-b .step { background: #ecfeff; border-color: #a5f3fc; color: var(--track-b); }
+
+    /* ── メトリクスカード ── */
+    .metrics-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+    .metric-chip {
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+
+    /* ── ファイルツリー ── */
+    .file-tree {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border-radius: 10px;
+      padding: 20px 24px;
+      font-family: "Cascadia Code", monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .file-tree .dir  { color: #7dd3fc; }
+    .file-tree .file { color: #e2e8f0; }
+    .file-tree .note { color: #64748b; }
+
+    /* ── フッター ── */
+    footer {
+      text-align: center;
+      color: var(--gray-400);
+      font-size: 12px;
+      padding: 40px 24px 20px;
+    }
+
+    hr { border: none; border-top: 1px solid var(--gray-200); margin: 28px 0; }
+    code { background: var(--gray-100); border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 13px; color: var(--gray-800); }
+    ul, ol { padding-left: 22px; }
+    li { margin: 5px 0; color: var(--gray-700); }
+
+    /* ── 出力例 ── */
+    .output-block {
+      background: #0f172a;
+      color: #94a3b8;
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 12px 0;
+      border: 1px solid #1e293b;
+    }
+    .output-block .ok  { color: #86efac; }
+    .output-block .em  { color: #fde68a; }
+    .output-block .dim { color: #475569; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div style="max-width:980px; margin:0 auto; position:relative;">
+    <div class="badge">Phase 1 ドキュメント</div>
+    <h1>一人称視点映像 作業分析システム<br>Phase 1 — バックエンドパイプライン マニュアル</h1>
+    <p>工場ラインにおけるゼロショット作業セグメンテーション（Track A / Track B）と評価基盤の使い方</p>
+    <div class="meta">
+      <span>📅 2026-06-09</span>
+      <span>📦 egocentric-work-analysis v0.1.0</span>
+      <span>🐍 Python 3.11+</span>
+      <span>🔬 37 tests passing</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>目次</h2>
+    <ol>
+      <li><a href="#overview">Phase 1 概要</a></li>
+      <li><a href="#architecture">アーキテクチャ — Track A / Track B</a></li>
+      <li><a href="#setup">セットアップ</a></li>
+      <li><a href="#track-b">Track B を実行する（CLIP パイプライン）</a></li>
+      <li><a href="#track-a">Track A を実行する（Gemini）</a></li>
+      <li><a href="#both">Track A / B を比較する</a></li>
+      <li><a href="#evaluate">評価指標で精度を測る</a></li>
+      <li><a href="#annotation">正解アノテーションの作り方</a></li>
+      <li><a href="#options">オプション一覧</a></li>
+      <li><a href="#outputs">出力ファイル仕様</a></li>
+      <li><a href="#verify-summary">何が検証できるか — まとめ</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. 概要 -->
+  <div class="section" id="overview">
+    <div class="section-title">
+      <div class="num">1</div>
+      <h2>Phase 1 概要</h2>
+    </div>
+
+    <p>Phase 1 は <strong>CLIで動作するバックエンドパイプライン</strong> です。工場ラインの一人称視点動画（20分前後）を入力し、どの時間帯にどの作業をしていたかを自動でセグメンテーションします。</p>
+
+    <div class="info-box blue">
+      <span class="icon">🎯</span>
+      <div><strong>目的：</strong>Ollo Factory Tools と同等機能を自前実装し、精度をベンチマーク比較できる基盤を作る。Phase 2（Web UI）は Phase 1 の動作確認後に着手。</div>
+    </div>
+
+    <h3>Phase 1 で実現すること</h3>
+    <table>
+      <thead><tr><th>機能</th><th>状態</th><th>説明</th></tr></thead>
+      <tbody>
+        <tr><td>フレーム抽出</td><td><span class="badge-ok">✅ 完了</span></td><td>動画から指定FPSでフレームをサンプリング。顔ぼかし対応。</td></tr>
+        <tr><td>Track B：CLIPパイプライン</td><td><span class="badge-ok">✅ 完了</span></td><td>CLIP埋め込み → 変化点検出 → ゼロショットラベリング</td></tr>
+        <tr><td>Track A：Gemini単一パス</td><td><span class="badge-ok">✅ 完了</span></td><td>5分ウィンドウ分割でGemini 2.5 Proにフレーム送信</td></tr>
+        <tr><td>TAS評価指標</td><td><span class="badge-ok">✅ 完了</span></td><td>F1@{10,25,50}・Edit Distance・フレーム精度</td></tr>
+        <tr><td>マルチシステム比較</td><td><span class="badge-ok">✅ 完了</span></td><td>Track A / B / Ollo を同一指標で横並び比較</td></tr>
+        <tr><td>CLIスクリプト</td><td><span class="badge-ok">✅ 完了</span></td><td>run_pipeline.py / run_evaluate.py</td></tr>
+        <tr><td>Web UI</td><td><span class="badge-b">Phase 2</span></td><td>FastAPI + htmx + Alpine.js（設計済み、未実装）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. アーキテクチャ -->
+  <div class="section" id="architecture">
+    <div class="section-title">
+      <div class="num">2</div>
+      <h2>アーキテクチャ — Track A / Track B</h2>
+    </div>
+
+    <p>同じ動画・同じラベル語彙を入力として、<strong>2種類のアプローチが並走</strong>します。同一の評価指標で比較することで、どちらが精度・速度・コストで優れるかを検証できます。</p>
+
+    <h3><span class="badge-b">Track B</span>&nbsp; CLIPパイプライン（API不要）</h3>
+    <div class="pipeline track-b">
+      <div class="step">① フレーム抽出</div><div class="arrow">→</div>
+      <div class="step">② CLIP 埋め込み<br><small>ViT-B-32</small></div><div class="arrow">→</div>
+      <div class="step">③ 変化点検出<br><small>ruptures PELT</small></div><div class="arrow">→</div>
+      <div class="step">④ ゼロショット<br>ラベリング</div><div class="arrow">→</div>
+      <div class="step">⑤ 結果JSON</div>
+    </div>
+    <p>外部API不要。初回CLIPモデルダウンロード（約600MB）後はオフラインで動作。変化点を先に検出してから各セグメントをラベリングするため、長尺動画でも文脈ウィンドウを使いません。</p>
+
+    <h3 style="margin-top:24px;"><span class="badge-a">Track A</span>&nbsp; Gemini 単一パス（要 API キー）</h3>
+    <div class="pipeline track-a">
+      <div class="step">① 5分ウィンドウ<br>に分割</div><div class="arrow">→</div>
+      <div class="step">② フレーム + タイム<br>スタンプをBase64</div><div class="arrow">→</div>
+      <div class="step">③ Gemini 2.5 Pro<br>にJSON出力要求</div><div class="arrow">→</div>
+      <div class="step">④ ウィンドウ間<br>マージ</div><div class="arrow">→</div>
+      <div class="step">⑤ 結果JSON</div>
+    </div>
+    <p>大規模マルチモーダルモデルの推論能力を活用。20分動画は4ウィンドウに分割してGeminiに送信。APIコスト・ネットワーク依存あり。</p>
+
+    <h3>比較の軸</h3>
+    <table>
+      <thead><tr><th>観点</th><th><span class="badge-b">Track B（CLIP）</span></th><th><span class="badge-a">Track A（Gemini）</span></th></tr></thead>
+      <tbody>
+        <tr><td>ネット接続</td><td>不要（初回DL後）</td><td>必須</td></tr>
+        <tr><td>処理速度</td><td>速い（GPU不要でもCPU動作）</td><td>遅い（Gemini API往復 × N回）</td></tr>
+        <tr><td>コスト</td><td>無料</td><td>Gemini API 従量課金</td></tr>
+        <tr><td>精度（期待値）</td><td>中〜高（変化点の感度に依存）</td><td>高（最新VLMの推論能力）</td></tr>
+        <tr><td>閉域網対応</td><td>◎</td><td>✗</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. セットアップ -->
+  <div class="section" id="setup">
+    <div class="section-title">
+      <div class="num">3</div>
+      <h2>セットアップ</h2>
+    </div>
+
+    <h3>① リポジトリの準備</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># リポジトリをクローン（初回のみ）</span>
+git clone https://github.com/gekkoga226/egocentric-work-analysis.git
+<span class="kw">cd</span> egocentric-work-analysis
+
+<span class="c"># パッケージをインストール（編集可能モード）</span>
+pip install -e .</pre>
+    </div>
+
+    <h3>② torch のインストール（Windows CPU 版）</h3>
+    <div class="info-box amber">
+      <span class="icon">⚠️</span>
+      <div>Windows 環境では torch の最新版が DLL エラーになる場合があります。<strong>v2.7.0+cpu</strong> を明示指定してください。</div>
+    </div>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre>pip install torch==2.7.0+cpu torchvision==0.22.0+cpu `
+  --index-url https://download.pytorch.org/whl/cpu</pre>
+    </div>
+
+    <h3>③ 動作確認（テスト実行）</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># CLIPモデルのDLが不要なテストのみ実行（37件）</span>
+python -m pytest tests/ -v --ignore=tests/pipeline/test_embed.py</pre>
+    </div>
+    <div class="output-block">
+<span class="ok">============================= test session starts =============================</span>
+<span class="ok">collected 37 items</span>
+
+tests/evaluate/test_compare.py::test_compare_systems_keys <span class="ok">PASSED</span>
+tests/evaluate/test_metrics.py::test_f1_perfect_match <span class="ok">PASSED</span>
+tests/pipeline/test_ingest.py::test_extract_returns_tuples <span class="ok">PASSED</span>
+<span class="dim">... (省略) ...</span>
+tests/test_integration.py::test_track_b_end_to_end <span class="ok">PASSED</span>
+
+<span class="ok">============================== 37 passed in 13.53s =============================</span>
+    </div>
+
+    <h3>④ ディレクトリ構成の確認</h3>
+    <div class="file-tree">
+<span class="dir">egocentric-work-analysis/</span>
+├── <span class="dir">src/</span>
+│   ├── <span class="dir">pipeline/</span>
+│   │   ├── <span class="file">ingest.py</span>          <span class="note"># フレーム抽出</span>
+│   │   ├── <span class="file">embed.py</span>           <span class="note"># CLIP埋め込み（初回DL約600MB）</span>
+│   │   ├── <span class="file">presegment.py</span>      <span class="note"># 変化点検出</span>
+│   │   ├── <span class="file">label_zeroshot.py</span>  <span class="note"># Track B ラベリング</span>
+│   │   ├── <span class="file">label_vlm_single.py</span> <span class="note"># Track A（Gemini）</span>
+│   │   └── <span class="file">report.py</span>          <span class="note"># Markdownレポート生成</span>
+│   └── <span class="dir">evaluate/</span>
+│       ├── <span class="file">metrics.py</span>         <span class="note"># TAS評価指標</span>
+│       └── <span class="file">compare.py</span>         <span class="note"># マルチシステム比較</span>
+├── <span class="dir">scripts/</span>
+│   ├── <span class="file">run_pipeline.py</span>    <span class="note"># ← メインCLI</span>
+│   └── <span class="file">run_evaluate.py</span>    <span class="note"># ← 評価CLI</span>
+├── <span class="dir">results/</span>            <span class="note"># 出力JSONが保存される</span>
+└── <span class="dir">annotations/</span>        <span class="note"># 正解アノテーションを置く</span>
+    </div>
+  </div>
+
+  <!-- 4. Track B -->
+  <div class="section" id="track-b">
+    <div class="section-title">
+      <div class="num">4</div>
+      <h2>Track B を実行する（CLIP パイプライン）</h2>
+    </div>
+
+    <div class="info-box green">
+      <span class="icon">✅</span>
+      <div><strong>まずここから始めてください。</strong>Gemini API キー不要。初回のみ CLIP モデルをダウンロード（約600MB）します。</div>
+    </div>
+
+    <h3>基本コマンド</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre>cd C:\Users\mizuk\work\ollo-benchmark
+
+python -m scripts.run_pipeline `
+  C:\path\to\your\video.mp4 `
+  "部品取り出し,ネジ締め,検査,梱包" `
+  --track b</pre>
+    </div>
+
+    <h3>何が検証できるか</h3>
+    <div class="verify-grid">
+      <div class="verify-card">
+        <h4>🔬 パイプライン全体の疎通</h4>
+        <ul>
+          <li>フレーム抽出が動作するか</li>
+          <li>CLIPモデルが正常にロードされるか</li>
+          <li>変化点検出が境界を返すか</li>
+          <li>ラベルが正しく割り当てられるか</li>
+          <li>JSONファイルが <code>results/</code> に保存されるか</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>🎯 ゼロショット性能の確認</h4>
+        <ul>
+          <li>定義したラベル語彙で正しく分類できるか</li>
+          <li>作業の切り替わりタイミングを検出できるか</li>
+          <li>意味的に異なる作業を区別できるか</li>
+          <li>CLIPの特徴空間がファクトリー映像に適用できるか</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>⚙️ パラメータの挙動確認</h4>
+        <ul>
+          <li><code>--fps</code> 変更で分解能と速度のトレードオフ</li>
+          <li><code>--penalty</code> 変更で分割粒度の調整</li>
+          <li>短い動画で動作 → 長い動画（20分）でスケールするか</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>📊 出力形式の確認</h4>
+        <ul>
+          <li>Markdownタイムラインが可読か</li>
+          <li>JSONスキーマが正しいか</li>
+          <li>タイムスタンプが動画長と整合するか</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>詳細オプションの使い方</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># FPSを上げて精度向上（処理時間も増加）</span>
+python -m scripts.run_pipeline video.mp4 "作業A,作業B,作業C" `
+  --track b --fps 2.0
+
+<span class="c"># 変化点の感度を上げる（penaltyを小さく → セグメント数増加）</span>
+python -m scripts.run_pipeline video.mp4 "作業A,作業B,作業C" `
+  --track b --penalty 5.0
+
+<span class="c"># 顔ぼかし有効（プライバシー保護）</span>
+python -m scripts.run_pipeline video.mp4 "作業A,作業B,作業C" `
+  --track b --blur-faces
+
+<span class="c"># 出力先を指定</span>
+python -m scripts.run_pipeline video.mp4 "作業A,作業B,作業C" `
+  --track b --output-dir C:\results\experiment1</pre>
+    </div>
+
+    <h3>出力例</h3>
+    <div class="output-block">
+Video: video.mp4
+Labels (4): ['部品取り出し', 'ネジ締め', '検査', '梱包']
+
+── Track B (staged pipeline) ──
+  Extracted 1247 frames
+  Embedded 1247 frames
+  Boundaries: <span class="em">['183.0s', '421.5s', '734.2s', '1031.8s']</span>
+  Saved: results/video_track_b.json
+
+<span class="em">## タイムライン — video</span>
+<span class="dim">| 開始時刻  | 終了時刻  | 作業ラベル    |</span>
+<span class="dim">|-----------|-----------|---------------|</span>
+| 00:00.00  | 03:03.00  | 部品取り出し  |
+| 03:03.00  | 07:01.50  | ネジ締め      |
+| 07:01.50  | 12:14.20  | 検査          |
+| 12:14.20  | 20:00.00  | 梱包          |
+    </div>
+  </div>
+
+  <!-- 5. Track A -->
+  <div class="section" id="track-a">
+    <div class="section-title">
+      <div class="num">5</div>
+      <h2>Track A を実行する（Gemini）</h2>
+    </div>
+
+    <div class="info-box amber">
+      <span class="icon">🔑</span>
+      <div><strong>GEMINI_API_KEY が必要です。</strong><a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> で取得できます。</div>
+    </div>
+
+    <h3>APIキーを設定してから実行</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># セッション内で一時的に設定</span>
+$env:GEMINI_API_KEY = <span class="st">"AIza..."</span>
+
+python -m scripts.run_pipeline `
+  C:\path\to\your\video.mp4 `
+  <span class="st">"部品取り出し,ネジ締め,検査,梱包"</span> `
+  --track a</pre>
+    </div>
+
+    <div class="code-block">
+      <span class="lang-label">PowerShell（永続化）</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># ユーザー環境変数として永続化（再起動後も有効）</span>
+[System.Environment]::SetEnvironmentVariable(
+  <span class="st">"GEMINI_API_KEY"</span>, <span class="st">"AIza..."</span>, <span class="st">"User"</span>
+)</pre>
+    </div>
+
+    <h3>何が検証できるか</h3>
+    <div class="verify-grid">
+      <div class="verify-card">
+        <h4>🤖 VLM推論の品質</h4>
+        <ul>
+          <li>Gemini 2.5 Pro が工場映像を正しく理解できるか</li>
+          <li>5分ウィンドウの分割・マージが正しく機能するか</li>
+          <li>プロンプトに対して正しいJSON形式で返答するか</li>
+          <li>confidenceスコアが意味のある値を返すか</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>⚡ エラー耐性</h4>
+        <ul>
+          <li>API失敗時に警告ログを出してスキップするか</li>
+          <li>レスポンスにJSON配列がない場合を正しく処理するか</li>
+          <li>長尺動画（20分 = 4ウィンドウ）を完走するか</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>20分動画の処理イメージ</h3>
+    <table>
+      <thead><tr><th>ウィンドウ</th><th>時間範囲</th><th>送信フレーム数（0.2fps）</th></tr></thead>
+      <tbody>
+        <tr><td>Window 1</td><td>0:00 〜 5:00</td><td>60フレーム</td></tr>
+        <tr><td>Window 2</td><td>5:00 〜 10:00</td><td>60フレーム</td></tr>
+        <tr><td>Window 3</td><td>10:00 〜 15:00</td><td>60フレーム</td></tr>
+        <tr><td>Window 4</td><td>15:00 〜 20:00</td><td>60フレーム</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 6. 両方比較 -->
+  <div class="section" id="both">
+    <div class="section-title">
+      <div class="num">6</div>
+      <h2>Track A / B を比較する</h2>
+    </div>
+
+    <h3>両方を同時実行</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre>$env:GEMINI_API_KEY = <span class="st">"AIza..."</span>
+
+python -m scripts.run_pipeline `
+  C:\path\to\your\video.mp4 `
+  <span class="st">"部品取り出し,ネジ締め,検査,梱包"</span> `
+  --track both</pre>
+    </div>
+
+    <h3>何が検証できるか</h3>
+    <ul>
+      <li>同一動画に対して Track A と Track B の結果が <code>results/</code> に並んで生成されるか</li>
+      <li>両者のセグメント境界・ラベルの傾向の違いを目視確認できる</li>
+      <li>後続の評価コマンドで定量比較するための準備が整う</li>
+    </ul>
+
+    <h3>生成される出力ファイル</h3>
+    <div class="file-tree">
+results/
+├── <span class="file">video_track_b.json</span>   <span class="note"># Track B の結果</span>
+└── <span class="file">video_track_a.json</span>   <span class="note"># Track A の結果</span>
+    </div>
+  </div>
+
+  <!-- 7. 評価 -->
+  <div class="section" id="evaluate">
+    <div class="section-title">
+      <div class="num">7</div>
+      <h2>評価指標で精度を測る</h2>
+    </div>
+
+    <p>正解アノテーション（手動ラベリング）と比較して、<strong>定量スコア</strong>を算出します。</p>
+
+    <h3>評価指標の説明</h3>
+    <div class="metrics-row">
+      <span class="metric-chip">F1@10</span>
+      <span class="metric-chip">F1@25</span>
+      <span class="metric-chip">F1@50</span>
+      <span class="metric-chip">Edit Distance</span>
+      <span class="metric-chip">Frame Accuracy</span>
+    </div>
+    <table>
+      <thead><tr><th>指標</th><th>計算方法</th><th>何を測るか</th><th>理想値</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>F1@k</strong><br><small>k=10,25,50</small></td>
+          <td>予測セグメントと正解セグメントのIoUがk%以上の場合にTPとカウント。Precision・Recallを算出してF1を計算。</td>
+          <td>セグメント境界の正確さ。k=50は「半分以上重なっていれば正解」、k=10は「少し重なっていれば正解」。</td>
+          <td>1.0（=100%）</td>
+        </tr>
+        <tr>
+          <td><strong>Edit</strong></td>
+          <td>ラベル列のLevenshtein距離を最大長で正規化して0〜100に変換。</td>
+          <td>セグメント順序・ラベル系列の正しさ。境界がずれていても順序が合っていれば高スコア。</td>
+          <td>100.0</td>
+        </tr>
+        <tr>
+          <td><strong>Acc</strong></td>
+          <td>1秒ごとにフレームラベルを比較して一致率を計算。</td>
+          <td>フレーム単位の正確さ。長いセグメントが多い動画で高くなりやすい。</td>
+          <td>1.0（=100%）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>評価コマンド</h3>
+    <div class="code-block">
+      <span class="lang-label">PowerShell</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre><span class="c"># Track B のみ評価</span>
+python -m scripts.run_evaluate `
+  annotations\video.json `
+  results\video_track_b.json
+
+<span class="c"># Track A / B を横並び比較</span>
+python -m scripts.run_evaluate `
+  annotations\video.json `
+  results\video_track_b.json `
+  results\video_track_a.json</pre>
+    </div>
+
+    <h3>出力例</h3>
+    <div class="output-block">
+| system  | f1@10 | f1@25 | f1@50 | edit  | acc   |
+|---------|-------|-------|-------|-------|-------|
+| track_b | 0.85  | 0.80  | 0.70  | 75.0  | 0.82  |
+| track_a | 0.90  | 0.87  | 0.78  | 82.0  | 0.88  |
+    </div>
+
+    <h3>何が検証できるか</h3>
+    <div class="verify-grid">
+      <div class="verify-card">
+        <h4>📊 Track A vs Track B の優劣</h4>
+        <ul>
+          <li>同一動画で Track A / B のスコアを比較</li>
+          <li>コスト・速度・精度のトレードオフを定量化</li>
+          <li>作業の種類によって得意不得意が変わるか確認</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>🔧 パラメータ調整の効果</h4>
+        <ul>
+          <li><code>--penalty</code> を変えて F1 がどう変わるか</li>
+          <li><code>--fps</code> を上げると Acc が向上するか</li>
+          <li>最適パラメータを探索できる</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>🏭 Ollo との比較基盤</h4>
+        <ul>
+          <li>Ollo の出力をJSONに変換して同指標で評価可能</li>
+          <li>学術論文と同一指標（TAS標準）で比較できる</li>
+          <li>Assembly101 / Ego4D 等のベンチマークへの拡張が可能</li>
+        </ul>
+      </div>
+      <div class="verify-card">
+        <h4>🔬 評価指標の妥当性確認</h4>
+        <ul>
+          <li>F1@10 &gt; F1@50 が必ず成り立つか</li>
+          <li>完全一致の予測でスコアが全て最大値になるか</li>
+          <li>完全不一致でスコアが最小になるか</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. アノテーション -->
+  <div class="section" id="annotation">
+    <div class="section-title">
+      <div class="num">8</div>
+      <h2>正解アノテーションの作り方</h2>
+    </div>
+
+    <p>手動でラベリングした正解データを <code>annotations/</code> フォルダに置きます。</p>
+
+    <h3>フォーマット</h3>
+    <div class="code-block">
+      <span class="lang-label">annotations/video.json</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre>{
+  <span class="st">"video_id"</span>: <span class="st">"video"</span>,
+  <span class="st">"fps_sampled"</span>: 1.0,
+  <span class="st">"label_vocabulary"</span>: [<span class="st">"部品取り出し"</span>, <span class="st">"ネジ締め"</span>, <span class="st">"検査"</span>, <span class="st">"梱包"</span>],
+  <span class="st">"segments"</span>: [
+    {<span class="st">"start_sec"</span>: 0.0,   <span class="st">"end_sec"</span>: 183.0,  <span class="st">"label"</span>: <span class="st">"部品取り出し"</span>, <span class="st">"confidence"</span>: 1.0},
+    {<span class="st">"start_sec"</span>: 183.0, <span class="st">"end_sec"</span>: 421.0,  <span class="st">"label"</span>: <span class="st">"ネジ締め"</span>,     <span class="st">"confidence"</span>: 1.0},
+    {<span class="st">"start_sec"</span>: 421.0, <span class="st">"end_sec"</span>: 734.0,  <span class="st">"label"</span>: <span class="st">"検査"</span>,         <span class="st">"confidence"</span>: 1.0},
+    {<span class="st">"start_sec"</span>: 734.0, <span class="st">"end_sec"</span>: 1200.0, <span class="st">"label"</span>: <span class="st">"梱包"</span>,         <span class="st">"confidence"</span>: 1.0}
+  ],
+  <span class="st">"source"</span>: <span class="st">"ground_truth"</span>
+}</pre>
+    </div>
+
+    <div class="info-box blue">
+      <span class="icon">💡</span>
+      <div>
+        <strong>タイムスタンプの調べ方：</strong><br>
+        VLCメディアプレーヤーで動画を再生しながら、作業が切り替わる時刻を <code>hh:mm:ss</code> で記録 → 秒数に変換して記入します。
+        例: <code>03:03</code> → <code>183.0</code>秒
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. オプション一覧 -->
+  <div class="section" id="options">
+    <div class="section-title">
+      <div class="num">9</div>
+      <h2>オプション一覧</h2>
+    </div>
+
+    <h3>run_pipeline.py</h3>
+    <table>
+      <thead><tr><th>オプション</th><th>デフォルト</th><th>説明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--track</code></td><td><code>both</code></td><td><code>a</code> / <code>b</code> / <code>both</code> で実行するトラックを選択</td></tr>
+        <tr><td><code>--fps</code></td><td><code>1.0</code></td><td>フレームサンプリングFPS。上げると精度↑・処理時間↑</td></tr>
+        <tr><td><code>--penalty</code></td><td><code>10.0</code></td><td>変化点検出の感度。小さくすると分割数↑（Track B）</td></tr>
+        <tr><td><code>--blur-faces</code></td><td>なし</td><td>顔をGaussianBlurで処理。プライバシー保護用</td></tr>
+        <tr><td><code>--output-dir</code></td><td><code>results</code></td><td>出力JSONの保存ディレクトリ</td></tr>
+      </tbody>
+    </table>
+
+    <h3>run_evaluate.py</h3>
+    <table>
+      <thead><tr><th>オプション</th><th>デフォルト</th><th>説明</th></tr></thead>
+      <tbody>
+        <tr><td><code>--fps</code></td><td><code>1.0</code></td><td>frame_accuracy 計算時の分解能。pipeline実行時と合わせる</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 10. 出力ファイル -->
+  <div class="section" id="outputs">
+    <div class="section-title">
+      <div class="num">10</div>
+      <h2>出力ファイル仕様</h2>
+    </div>
+
+    <p>実行後に <code>results/{video_id}_{source}.json</code> が生成されます。</p>
+
+    <div class="code-block">
+      <span class="lang-label">results/video_track_b.json</span>
+      <button class="copy-btn" onclick="copyCode(this)">コピー</button>
+      <pre>{
+  <span class="st">"video_id"</span>: <span class="st">"video"</span>,
+  <span class="st">"fps_sampled"</span>: 1.0,
+  <span class="st">"label_vocabulary"</span>: [<span class="st">"部品取り出し"</span>, <span class="st">"ネジ締め"</span>, <span class="st">"検査"</span>, <span class="st">"梱包"</span>],
+  <span class="st">"segments"</span>: [
+    {
+      <span class="st">"start_sec"</span>: 0.0,
+      <span class="st">"end_sec"</span>: 183.0,
+      <span class="st">"label"</span>: <span class="st">"部品取り出し"</span>,
+      <span class="st">"confidence"</span>: 0.847
+    }
+    <span class="c">// ... 以降のセグメント</span>
+  ],
+  <span class="st">"source"</span>: <span class="st">"track_b"</span>
+}</pre>
+    </div>
+
+    <table>
+      <thead><tr><th>フィールド</th><th>型</th><th>説明</th></tr></thead>
+      <tbody>
+        <tr><td><code>video_id</code></td><td>string</td><td>動画ファイル名（拡張子なし）</td></tr>
+        <tr><td><code>fps_sampled</code></td><td>float</td><td>実行時に使用したサンプリングFPS</td></tr>
+        <tr><td><code>label_vocabulary</code></td><td>list</td><td>渡したラベル語彙リスト</td></tr>
+        <tr><td><code>segments[].start_sec</code></td><td>float</td><td>セグメント開始時刻（秒）</td></tr>
+        <tr><td><code>segments[].end_sec</code></td><td>float</td><td>セグメント終了時刻（秒）</td></tr>
+        <tr><td><code>segments[].label</code></td><td>string</td><td>割り当てたラベル名</td></tr>
+        <tr><td><code>segments[].confidence</code></td><td>float</td><td>CLIPコサイン類似度 or Gemini確信度（0〜1）</td></tr>
+        <tr><td><code>source</code></td><td>string</td><td><code>track_a</code> / <code>track_b</code> / <code>ground_truth</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 11. まとめ -->
+  <div class="section" id="verify-summary">
+    <div class="section-title">
+      <div class="num">11</div>
+      <h2>何が検証できるか — まとめ</h2>
+    </div>
+
+    <table>
+      <thead><tr><th>コマンド</th><th>検証できること</th><th>前提</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>pytest tests/ -v --ignore=...</code></td>
+          <td>全モジュールの単体テスト（37件）。スキーマ・評価指標・パイプライン各ステージの正確性をコード変更前後に確認。</td>
+          <td>CLIPモデル不要</td>
+        </tr>
+        <tr>
+          <td><code>run_pipeline --track b</code></td>
+          <td>Track B パイプライン全体の疎通。CLIP が工場映像を分類できるかの実映像検証。penalty/fps チューニング。</td>
+          <td>CLIP DL（初回）</td>
+        </tr>
+        <tr>
+          <td><code>run_pipeline --track a</code></td>
+          <td>Gemini 2.5 Pro の工場映像理解能力。5分ウィンドウ分割の動作。JSON出力の安定性。</td>
+          <td>GEMINI_API_KEY</td>
+        </tr>
+        <tr>
+          <td><code>run_pipeline --track both</code></td>
+          <td>Track A / B を同一動画で比較実行。両者の結果ファイルを並べて目視・定量比較する準備。</td>
+          <td>両方</td>
+        </tr>
+        <tr>
+          <td><code>run_evaluate gt.json pred_b.json pred_a.json</code></td>
+          <td>TAS 標準指標（F1@10/25/50・Edit・Acc）での定量評価。Track A vs Track B の精度差。Ollo との比較基盤。</td>
+          <td>正解アノテーション</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr>
+
+    <h3>推奨する検証ステップ</h3>
+    <ol style="line-height:2.2;">
+      <li><strong>テスト実行</strong> — <code>pytest</code> で 37件パスを確認</li>
+      <li><strong>短い動画で Track B 動作確認</strong> — 2〜3分の動画で疎通テスト</li>
+      <li><strong>20分動画で Track B 実行</strong> — 長尺動画のスケールを確認</li>
+      <li><strong>手動でアノテーション作成</strong> — 目視で正解タイムスタンプを記録</li>
+      <li><strong>評価コマンドで定量スコア算出</strong> — F1・Edit・Acc を確認</li>
+      <li><strong>パラメータを変えて再実行</strong> — penalty / fps を調整してスコアの変化を確認</li>
+      <li><strong>Track A と比較</strong> — APIキー取得後、同動画で Track A を実行して定量比較</li>
+    </ol>
+
+    <div class="info-box green">
+      <span class="icon">🚀</span>
+      <div>
+        <strong>Phase 2 へ進む条件：</strong>
+        Track B で実動画に対して有意なセグメンテーション結果が得られ、評価指標が安定したら Phase 2（Web UI）の実装に着手します。
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>egocentric-work-analysis v0.1.0 &nbsp;|&nbsp; Phase 1 Backend Manual &nbsp;|&nbsp; 2026-06-09</p>
+  <p style="margin-top:4px;">GitHub: <a href="https://github.com/gekkoga226/egocentric-work-analysis" style="color:#6b7280;">gekkoga226/egocentric-work-analysis</a></p>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ コピー済み';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'コピー';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
