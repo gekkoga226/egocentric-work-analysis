@@ -75,12 +75,17 @@ function videoApp() {
     currentLabel: '',
 
     init() {
-      // htmx イベントでジョブIDを受け取る
-      document.body.addEventListener('jobRegistered', (e) => {
-        this.jobId = e.detail.jobId;
+      // アップロード後に job_id を受け取る
+      window.addEventListener('job-registered', (e) => {
+        this.jobId = e.detail;
       });
-      document.body.addEventListener('segmentsLoaded', (e) => {
-        this.segments = e.detail.segments;
+      // 分析結果のセグメント一覧を受け取る
+      window.addEventListener('segments-loaded', (e) => {
+        this.segments = e.detail;
+      });
+      // タイムライン行クリック → シーク
+      window.addEventListener('seek-to', (e) => {
+        this.seekTo(e.detail);
       });
     },
 

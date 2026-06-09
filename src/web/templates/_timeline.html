@@ -20,7 +20,7 @@
 
 <!-- セグメントテーブル -->
 <table class="seg-table"
-       hx-on:htmx:after-settle="htmx.trigger(document.body, 'segmentsLoaded', {detail: {segments: {{ segments_dicts | tojson }}}})">
+       hx-on:htmx:after-settle="window.dispatchEvent(new CustomEvent('segments-loaded', {detail: {{ segments_dicts | tojson }}}))">
   <thead>
     <tr><th>開始</th><th>終了</th><th>作業ラベル</th><th>信頼度</th></tr>
   </thead>
@@ -29,7 +29,7 @@
     <tr class="seg-row"
         data-start="{{ seg.start_sec }}"
         data-end="{{ seg.end_sec }}"
-        onclick="document.querySelector('[x-data]').__x.$data.seekTo({{ seg.start_sec }})"
+        onclick="window.dispatchEvent(new CustomEvent('seek-to', {detail: {{ seg.start_sec }}}))"
         title="クリックでシーク">
       <td>{{ '%02d:%05.2f' | format(seg.start_sec // 60, seg.start_sec % 60) }}</td>
       <td>{{ '%02d:%05.2f' | format(seg.end_sec // 60, seg.end_sec % 60) }}</td>

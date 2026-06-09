@@ -6,7 +6,7 @@
         hx-target="#timeline-content"
         hx-swap="innerHTML"
         hx-indicator="#analyze-spin"
-        hx-on:htmx:before-send="htmx.trigger(document.body, 'jobRegistered', {detail: {jobId: '{{ job_id }}'}})">
+        hx-on:htmx:before-send="window.dispatchEvent(new CustomEvent('job-registered', {detail: '{{ job_id }}'}))">
 
     <input type="hidden" name="job_id" value="{{ job_id }}">
 
