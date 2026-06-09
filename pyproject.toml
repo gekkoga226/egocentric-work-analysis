@@ -15,10 +15,14 @@ dependencies = [
     "ruptures>=1.1",
     "google-genai>=1.0",
     "typer>=0.12",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-mock>=3.12"]
+dev = ["pytest>=8.0", "pytest-mock>=3.12", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

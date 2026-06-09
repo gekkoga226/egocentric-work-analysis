@@ -1,0 +1,43 @@
+<section class="card">
+  <h2>② ラベル入力 &amp; 実行</h2>
+  <p class="filename">📹 {{ filename }}</p>
+
+  <form hx-post="/analyze"
+        hx-target="#timeline-content"
+        hx-swap="innerHTML"
+        hx-indicator="#analyze-spin"
+        hx-on:htmx:before-send="htmx.trigger(document.body, 'jobRegistered', {detail: {jobId: '{{ job_id }}'}})">
+
+    <input type="hidden" name="job_id" value="{{ job_id }}">
+
+    <label>
+      作業ラベル（カンマ区切り）
+      <input type="text" name="labels" placeholder="部品取り出し,ネジ締め,検査,梱包" required class="input-full">
+    </label>
+
+    <label>
+      Track
+      <select name="track" class="input-full">
+        <option value="b">Track B（CLIP・API不要）</option>
+        <option value="a">Track A（Gemini・APIキー必要）</option>
+        <option value="both">両方を比較</option>
+      </select>
+    </label>
+
+    <details class="advanced">
+      <summary>詳細オプション</summary>
+      <label>サンプリング FPS
+        <input type="number" name="fps" value="1.0" step="0.5" min="0.1" max="5.0" class="input-short">
+      </label>
+      <label>変化点 Penalty（Track B）
+        <input type="number" name="penalty" value="10.0" step="1.0" min="1.0" class="input-short">
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="blur_faces" value="true"> 顔ぼかし（プライバシー保護）
+      </label>
+    </details>
+
+    <button type="submit" class="btn-primary">🚀 分析開始</button>
+    <span id="analyze-spin" class="htmx-indicator">分析中…</span>
+  </form>
+</section>

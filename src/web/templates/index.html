@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>作業分析システム — Egocentric Work Analysis</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/alpine.min.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+  <h1>🔬 作業分析システム</h1>
+  <span class="version">Phase 1 · Track A/B</span>
+</header>
+
+<main class="layout" x-data="videoApp()" x-init="init()">
+
+  <!-- ── サイドパネル ── -->
+  <aside class="sidebar">
+    <section class="card">
+      <h2>① 動画アップロード</h2>
+      <form hx-post="/upload"
+            hx-target="#sidebar-content"
+            hx-swap="innerHTML"
+            hx-encoding="multipart/form-data"
+            hx-indicator="#upload-spin">
+        <label class="file-label">
+          <input type="file" name="file" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska" required>
+          <span>動画を選択</span>
+        </label>
+        <button type="submit" class="btn-primary">アップロード</button>
+        <span id="upload-spin" class="htmx-indicator">処理中…</span>
+      </form>
+    </section>
+
+    <div id="sidebar-content"></div>
+  </aside>
+
+  <!-- ── 動画プレイヤー ── -->
+  <section class="player-pane">
+    <template x-if="jobId">
+      <div>
+        <video
+          x-ref="video"
+          :src="'/video/' + jobId"
+          controls
+          preload="metadata"
+          @timeupdate="onTimeUpdate()"
+          class="video-player">
+        </video>
+        <div class="player-info" x-text="currentLabel ? '▶ ' + currentLabel : '再生中...'"></div>
+      </div>
+    </template>
+    <template x-if="!jobId">
+      <div class="placeholder">動画をアップロードしてください</div>
+    </template>
+  </section>
+
+  <!-- ── タイムラインペイン ── -->
+  <section class="timeline-pane">
+    <div id="timeline-content">
+      <div class="placeholder">分析が完了するとタイムラインが表示されます</div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+function videoApp() {
+  return {
+    jobId: null,
+    segments: [],
+    currentLabel: '',
+
+    init() {
+      // htmx イベントでジョブIDを受け取る
+      document.body.addEventListener('jobRegistered', (e) => {
+        this.jobId = e.detail.jobId;
+      });
+      document.body.addEventListener('segmentsLoaded', (e) => {
+        this.segments = e.detail.segments;
+      });
+    },
+
+    onTimeUpdate() {
+      const t = this.$refs.video?.currentTime ?? 0;
+      // 現在時刻に対応するセグメントを探してハイライト
+      const current = this.segments.find(s => t >= s.start_sec && t < s.end_sec);
+      this.currentLabel = current ? current.label : '';
+
+      document.querySelectorAll('.seg-row').forEach(row => {
+        const start = parseFloat(row.dataset.start);
+        const end = parseFloat(row.dataset.end);
+        if (t >= start && t < end) {
+          row.classList.add('active');
+          row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+          row.classList.remove('active');
+        }
+      });
+    },
+
+    seekTo(sec) {
+      if (this.$refs.video) {
+        this.$refs.video.currentTime = sec;
+        this.$refs.video.play();
+      }
+    },
+  };
+}
+</script>
+
+</body>
+</html>

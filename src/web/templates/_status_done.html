@@ -1,0 +1,8 @@
+<!-- 完了断片: ポーリングを持たず、load 時に /results を1回だけ叩く -->
+<div hx-get="/results/{{ job_id }}?track={{ track }}"
+     hx-trigger="load"
+     hx-target="#timeline-content"
+     hx-swap="innerHTML"
+     class="status-done">
+  ✅ 分析完了 — タイムラインを読み込み中...
+</div>
