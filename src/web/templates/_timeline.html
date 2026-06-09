@@ -20,7 +20,7 @@
 
 <!-- セグメントテーブル -->
 <table class="seg-table"
-       hx-on:htmx:after-settle="htmx.trigger(document.body, 'segmentsLoaded', {detail: {segments: {{ seg_list.segments | tojson }}}})">
+       hx-on:htmx:after-settle="htmx.trigger(document.body, 'segmentsLoaded', {detail: {segments: {{ segments_dicts | tojson }}}})">
   <thead>
     <tr><th>開始</th><th>終了</th><th>作業ラベル</th><th>信頼度</th></tr>
   </thead>

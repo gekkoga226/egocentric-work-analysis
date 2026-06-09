@@ -142,10 +142,14 @@ async def results(request: Request, job_id: str, track: str = "b") -> HTMLRespon
             status_code=404,
         )
 
+    from dataclasses import asdict
     from src.schemas import SegmentList
     from src.evaluate.compare import compare_systems
 
     seg_list = SegmentList.from_json(result_path.read_text(encoding="utf-8"))
+
+    # Segment dataclass を dict に変換（Jinja2 tojson フィルター用）
+    segments_dicts = [asdict(s) for s in seg_list.segments]
 
     metrics = None
     ann_path = _ANNOTATIONS_DIR / f"{video_id}.json"
@@ -157,7 +161,13 @@ async def results(request: Request, job_id: str, track: str = "b") -> HTMLRespon
     return templates.TemplateResponse(
         request=request,
         name="_timeline.html",
-        context={"job_id": job_id, "seg_list": seg_list, "metrics": metrics, "track": track},
+        context={
+            "job_id": job_id,
+            "seg_list": seg_list,
+            "segments_dicts": segments_dicts,
+            "metrics": metrics,
+            "track": track,
+        },
     )
 
 
