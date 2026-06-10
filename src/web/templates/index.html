@@ -3,107 +3,565 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>作業分析システム — Egocentric Work Analysis</title>
+  <title>作業分析システム</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/vendor/htmx.min.js"></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
 </head>
-<body>
+<body x-data="app()" x-init="init()">
 
-<header class="site-header">
-  <h1>🔬 作業分析システム</h1>
-  <span class="version">Phase 1 · Track A/B</span>
-</header>
+<!-- Gantt tooltip -->
+<div class="tip" id="tip">
+  <div class="tip-cat" id="tip-cat"></div>
+  <div class="tip-name" id="tip-name"></div>
+  <div class="tip-row" id="tip-time"></div>
+  <div class="tip-row" id="tip-dur"></div>
+</div>
 
-<main class="layout" x-data="videoApp()" x-init="init()">
+<!-- Icon strip -->
+<div class="strip">
+  <div class="strip-avatar">OI</div>
+  <div class="strip-sep"></div>
+  <button class="strip-btn strip-add" title="新しい分析" @click="goUpload()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+  <button class="strip-btn" :class="{on: screen==='results'}" title="作業リスト">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+      <circle cx="3.5" cy="6" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="3.5" cy="18" r="1" fill="currentColor" stroke="none"/>
+    </svg>
+  </button>
+  <button class="strip-btn" title="履歴">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+  </button>
+</div>
 
-  <!-- ── サイドパネル ── -->
-  <aside class="sidebar">
-    <section class="card">
-      <h2>① 動画アップロード</h2>
-      <form hx-post="/upload"
-            hx-target="#sidebar-content"
-            hx-swap="innerHTML"
-            hx-encoding="multipart/form-data"
-            hx-indicator="#upload-spin">
-        <label class="file-label">
-          <input type="file" name="file" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska" required>
-          <span>動画を選択</span>
-        </label>
-        <button type="submit" class="btn-primary">アップロード</button>
-        <span id="upload-spin" class="htmx-indicator">処理中…</span>
-      </form>
-    </section>
-
-    <div id="sidebar-content"></div>
-  </aside>
-
-  <!-- ── 動画プレイヤー ── -->
-  <section class="player-pane">
-    <template x-if="jobId">
-      <div>
-        <video
-          x-ref="video"
-          :src="'/video/' + jobId"
-          controls
-          preload="metadata"
-          @timeupdate="onTimeUpdate()"
-          class="video-player">
-        </video>
-        <div class="player-info" x-text="currentLabel ? '▶ ' + currentLabel : '再生中...'"></div>
+<!-- Sidebar (results screen only) -->
+<aside class="sidebar" x-show="screen === 'results'" x-cloak>
+  <div class="sb-head">
+    <span class="sb-title">作業リスト</span>
+    <span class="sb-count" x-text="segments.length"></span>
+  </div>
+  <div class="sb-list">
+    <template x-for="(seg, idx) in segments" :key="idx">
+      <div class="t-item"
+           :class="{ active: currentSegIdx === idx }"
+           @click="seekTo(seg.start_sec)">
+        <div class="t-drag">⠿</div>
+        <div class="t-body">
+          <div class="t-r1">
+            <span class="t-num" x-text="(idx+1)+'.'"></span>
+            <span class="t-title" x-text="seg.label"></span>
+          </div>
+          <div class="t-r2">
+            <span class="t-time">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span x-text="fmtTime(seg.start_sec)+' – '+fmtTime(seg.end_sec)+'  '+(seg.end_sec-seg.start_sec).toFixed(1)+'秒'"></span>
+            </span>
+            <span class="tag"
+                  :style="'background:'+getCatColor(seg).lt+';color:'+getCatColor(seg).dk"
+                  x-text="seg.label"></span>
+          </div>
+        </div>
       </div>
     </template>
-    <template x-if="!jobId">
-      <div class="placeholder">動画をアップロードしてください</div>
-    </template>
-  </section>
+  </div>
+</aside>
 
-  <!-- ── タイムラインペイン ── -->
-  <section class="timeline-pane">
-    <div id="timeline-content">
-      <div class="placeholder">分析が完了するとタイムラインが表示されます</div>
+<!-- Main -->
+<main class="main" style="position:relative; overflow:hidden;">
+
+  <!-- ① Upload screen -->
+  <div class="screen-layer" id="screenUpload" x-show="screen === 'upload'">
+    <div class="upload-wrap">
+      <div class="upload-brand">
+        <div class="upload-brand-dot"></div>
+        <div class="upload-brand-dot upload-brand-dot2"></div>
+        <span class="upload-brand-name">作業分析システム</span>
+      </div>
+      <div class="upload-card">
+        <div class="upload-title">新しい分析を開始</div>
+
+        <!-- 必須: 動画ファイル -->
+        <div class="up-section">
+          <div class="up-section-label">
+            <span class="up-badge up-badge-req">必須</span>
+            動画ファイル
+          </div>
+          <form id="uploadForm"
+                hx-post="/upload"
+                hx-target="#labelSlot"
+                hx-swap="innerHTML"
+                hx-encoding="multipart/form-data"
+                hx-indicator="#uploadSpin">
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+              <div class="drop-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="2" width="16" height="20" rx="2" stroke="#22C55E" stroke-width="1.5" fill="#F0FDF4"/>
+                  <polygon points="10,8 17,12 10,16" fill="#22C55E"/>
+                </svg>
+              </div>
+              <div class="drop-text">
+                ここに動画をドラッグ<br>または、<em onclick="event.stopPropagation();document.getElementById('fileInput').click()">ファイルを選択します</em>
+              </div>
+              <div class="drop-hint">MP4 / MOV / AVI / MKV 対応</div>
+              <input type="file" id="fileInput" name="file" accept="video/*"
+                     style="display:none"
+                     onchange="handleVideoSel(this); this.closest('form').requestSubmit()">
+            </div>
+            <!-- 選択済みチップ -->
+            <div class="up-selected" id="videoSelected" style="display:none">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2">
+                <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+              </svg>
+              <span class="up-sel-name" id="videoSelectedName"></span>
+              <span class="htmx-indicator" id="uploadSpin">アップロード中...</span>
+              <button type="button" class="up-sel-clear" onclick="clearVideoSel()">✕</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- labelSlot: _label_form.html がここに入る -->
+        <div id="labelSlot"></div>
+      </div>
     </div>
-  </section>
+  </div>
+
+  <!-- ② Processing screen -->
+  <div class="screen-layer" id="screenProc" x-show="screen === 'processing'" x-cloak>
+    <div class="proc-card">
+      <div class="proc-ring"></div>
+      <div style="text-align:center">
+        <div class="proc-title">分析中...</div>
+        <div class="proc-filename" x-text="currentFilename"></div>
+      </div>
+      <!-- _status_running.html (polling) / _status_done.html がここに入る -->
+      <div id="procStatus" class="proc-steps"></div>
+    </div>
+  </div>
+
+  <!-- ③ Results area -->
+  <div class="results-area" id="resultsArea" x-show="screen === 'results'" x-cloak>
+
+    <!-- Video player -->
+    <div class="vid-wrap">
+      <div class="vid-stage">
+        <template x-if="jobId">
+          <video
+            x-ref="video"
+            :src="'/video/' + jobId"
+            controls
+            preload="metadata"
+            @timeupdate="onTimeUpdate()"
+            class="video-player"
+            style="width:100%;height:100%;object-fit:contain;">
+          </video>
+        </template>
+        <template x-if="!jobId">
+          <div class="vid-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+            <span>動画を読み込んでいます...</span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <nav class="tabs-bar">
+      <button class="tb on" data-tab="gantt">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="16" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/>
+        </svg>
+        ガントチャート
+      </button>
+      <button class="tb" data-tab="table">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/>
+        </svg>
+        テーブル
+      </button>
+      <button class="tb" data-tab="stats">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10H12z" fill="currentColor" stroke="none" opacity=".4"/>
+        </svg>
+        統計情報
+      </button>
+    </nav>
+
+    <!-- Tab content -->
+    <div class="tc">
+
+      <!-- Gantt (client-side, from segments-loaded event) -->
+      <div class="panel on" id="panel-gantt">
+        <div class="g-wrap">
+          <div class="g-card">
+            <div class="g-ruler">
+              <div class="g-ruler-pad">ステップ</div>
+              <div class="g-ruler-ticks" id="gRuler"></div>
+            </div>
+            <div class="g-body" id="gBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table (server-rendered _timeline.html) -->
+      <div class="panel" id="panel-table">
+        <div class="tbl-wrap">
+          <div id="timeline-content">
+            <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:40px">分析完了後に表示されます</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats (client-side) -->
+      <div class="panel" id="panel-stats">
+        <div class="s-wrap">
+          <div class="s-inner">
+            <div class="s-h">📊 統計情報</div>
+            <div class="s-body">
+              <div class="s-chart">
+                <svg id="pieSvg" width="280" height="280" viewBox="0 0 280 280"></svg>
+              </div>
+              <div>
+                <div class="s-table" id="sTable"></div>
+                <div class="s-total">
+                  <div class="s-tl">合計時間</div>
+                  <div class="s-tv" id="sTot">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.tc -->
+  </div><!-- /#resultsArea -->
 
 </main>
 
 <script>
-function videoApp() {
+/* ── Category colors (seimi/fuzui/muda) + label fallback ── */
+const CATEGORY_COLORS = {
+  seimi: {color:'#22C55E', lt:'#DCFCE7', dk:'#15803D'},
+  fuzui: {color:'#F97316', lt:'#FFEDD5', dk:'#C2410C'},
+  muda:  {color:'#3B82F6', lt:'#DBEAFE', dk:'#1D4ED8'},
+};
+window.CATEGORY_COLORS = CATEGORY_COLORS;
+const CAT_COLORS = [
+  {color:'#8B5CF6', lt:'#EDE9FE', dk:'#6D28D9'},
+  {color:'#EC4899', lt:'#FCE7F3', dk:'#BE185D'},
+  {color:'#EAB308', lt:'#FEF9C3', dk:'#A16207'},
+  {color:'#14B8A6', lt:'#CCFBF1', dk:'#0F766E'},
+  {color:'#6B7280', lt:'#F3F4F6', dk:'#374151'},
+  {color:'#F43F5E', lt:'#FFE4E6', dk:'#BE123C'},
+];
+let _colorMap = {};
+function getColorForSeg(seg) {
+  if (seg.category && CATEGORY_COLORS[seg.category]) return CATEGORY_COLORS[seg.category];
+  if (_colorMap[seg.label] === undefined) {
+    const idx = Object.keys(_colorMap).length % CAT_COLORS.length;
+    _colorMap[seg.label] = idx;
+  }
+  return CAT_COLORS[_colorMap[seg.label]];
+}
+function getColorForLabel(label) {
+  if (_colorMap[label] === undefined) {
+    const idx = Object.keys(_colorMap).length % CAT_COLORS.length;
+    _colorMap[label] = idx;
+  }
+  return CAT_COLORS[_colorMap[label]];
+}
+
+/* ── Helpers ── */
+const mmss  = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+const mmss1 = s => `${Math.floor(s/60)}:${String((s%60).toFixed(1)).padStart(4,'0')}`;
+const durStr= s => s < 60 ? `${s.toFixed(1)}秒` : `${Math.floor(s/60)}分${(s%60|0)}秒`;
+
+/* ── Upload helpers ── */
+function handleVideoSel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('dropZone').style.display = 'none';
+  document.getElementById('videoSelected').style.display = 'flex';
+  document.getElementById('videoSelectedName').textContent = file.name;
+}
+function clearVideoSel() {
+  const fi = document.getElementById('fileInput');
+  if (fi) fi.value = '';
+  document.getElementById('dropZone').style.display = '';
+  document.getElementById('videoSelected').style.display = 'none';
+  document.getElementById('labelSlot').innerHTML = '';
+}
+
+/* ── Drag & drop ── */
+document.addEventListener('DOMContentLoaded', () => {
+  const dz = document.getElementById('dropZone');
+  if (!dz) return;
+  ['dragover','dragenter'].forEach(ev =>
+    dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave','dragend'].forEach(ev =>
+    dz.addEventListener(ev, () => dz.classList.remove('drag')));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('video/')) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        document.getElementById('fileInput').files = dt.files;
+      } catch(_) {}
+      handleVideoSel(document.getElementById('fileInput'));
+      document.getElementById('uploadForm').requestSubmit();
+    }
+  });
+});
+
+/* ── Tabs ── */
+document.addEventListener('click', e => {
+  const tb = e.target.closest('.tb');
+  if (!tb || !tb.dataset.tab) return;
+  document.querySelectorAll('.tb').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('on'));
+  tb.classList.add('on');
+  const panel = document.getElementById('panel-' + tb.dataset.tab);
+  if (panel) {
+    panel.classList.add('on');
+    if (tb.dataset.tab === 'gantt') requestAnimationFrame(updatePh);
+  }
+});
+
+/* ── Gantt ── */
+let _segments = [], _dur = 1, _curSec = 0;
+
+function buildGantt(segments) {
+  _segments = segments;
+  _dur = segments.length ? segments[segments.length - 1].end_sec : 1;
+
+  const TICK = 9;
+  document.getElementById('gRuler').innerHTML =
+    Array.from({length: TICK + 1}, (_, i) => {
+      const s = _dur / TICK * i;
+      return `<div class="g-tick" style="left:${(i/TICK*100).toFixed(3)}%">${mmss(s)}</div>`;
+    }).join('');
+
+  const grids = Array.from({length: TICK - 1}, (_, i) =>
+    `<div class="g-vline" style="left:calc(200px + (100% - 200px)*${((i+1)/TICK).toFixed(4)})"></div>`
+  ).join('');
+
+  const rows = segments.map((seg, idx) => {
+    const c = getColorForSeg(seg);
+    const l = (seg.start_sec / _dur * 100).toFixed(4);
+    const w = ((seg.end_sec - seg.start_sec) / _dur * 100).toFixed(4);
+    const desc = seg.description ? escHtml(seg.description) : '';
+    const catName = seg.category === 'seimi' ? '正味' : seg.category === 'fuzui' ? '付随' : seg.category === 'muda' ? 'ムダ' : '';
+    return `
+    <div class="g-row">
+      <div class="g-lbl">
+        <span class="g-lbl-num">${idx+1}.</span>
+        ${escHtml(seg.label)}
+      </div>
+      <div class="g-bars">
+        <div class="g-bar"
+          style="left:${l}%;width:${w}%;background:${c.color}"
+          data-label="${escHtml(seg.label)}"
+          data-cat="${escHtml(catName)}"
+          data-desc="${desc}"
+          data-improvement="${seg.improvement ? escHtml(seg.improvement) : ''}"
+          data-start="${seg.start_sec}" data-end="${seg.end_sec}"
+          onclick="window.dispatchEvent(new CustomEvent('seek-to',{detail:${seg.start_sec}}))">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('gBody').innerHTML =
+    grids + rows +
+    `<div class="g-ph" id="gPh"><div class="g-ph-badge" id="gBadge">${mmss(0)}</div></div>`;
+  updatePh();
+}
+
+function updatePh() {
+  const ph = document.getElementById('gPh');
+  const bg = document.getElementById('gBadge');
+  if (!ph || !_dur) return;
+  ph.style.left = `calc(200px + (100% - 200px) * ${_curSec / _dur})`;
+  if (bg) bg.textContent = mmss(_curSec);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Stats ── */
+function buildStats(segments) {
+  if (!segments.length) return;
+  const hasCategories = segments.some(s => s.category);
+  const CAT_NAMES = {seimi: '正味作業', fuzui: '付随作業', muda: 'ムダ作業'};
+
+  const keyOf  = s => hasCategories ? (s.category || 'unknown') : s.label;
+  const nameOf = k => hasCategories ? (CAT_NAMES[k] || '未分類') : k;
+  const colorOf = k => hasCategories
+    ? (CATEGORY_COLORS[k] || {color:'#6B7280', lt:'#F3F4F6', dk:'#374151'})
+    : getColorForLabel(k);
+
+  const totals = {}, counts = {};
+  segments.forEach(seg => {
+    const k = keyOf(seg);
+    const d = seg.end_sec - seg.start_sec;
+    totals[k] = (totals[k] || 0) + d;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  const total = Object.values(totals).reduce((a, b) => a + b, 0);
+  const keys = Object.keys(totals);
+
+  const cx=140, cy=140, R=118, ri=66;
+  let a = -Math.PI/2, paths = '';
+  keys.forEach(k => {
+    const c = colorOf(k);
+    const sl = totals[k] / total;
+    const ae = a + sl * Math.PI * 2;
+    const [x1,y1]=[cx+R*Math.cos(a), cy+R*Math.sin(a)];
+    const [x2,y2]=[cx+R*Math.cos(ae),cy+R*Math.sin(ae)];
+    const [xi1,yi1]=[cx+ri*Math.cos(a), cy+ri*Math.sin(a)];
+    const [xi2,yi2]=[cx+ri*Math.cos(ae),cy+ri*Math.sin(ae)];
+    const lg = sl > .5 ? 1 : 0;
+    const mid = a + sl*Math.PI, mr = (R+ri)/2;
+    paths += `<path d="M${xi1},${yi1} L${x1},${y1} A${R},${R} 0 ${lg},1 ${x2},${y2} L${xi2},${yi2} A${ri},${ri} 0 ${lg},0 ${xi1},${yi1}Z" fill="${c.color}" stroke="#fff" stroke-width="3"/>`;
+    if (sl > .05) paths += `<text x="${(cx+mr*Math.cos(mid)).toFixed(1)}" y="${(cy+mr*Math.sin(mid)).toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="13" font-weight="800">${(sl*100).toFixed(0)}%</text>`;
+    a = ae;
+  });
+  const tm = Math.floor(total/60), ts = Math.floor(total%60);
+  paths += `<text x="140" y="134" text-anchor="middle" fill="#374151" font-size="16" font-weight="800">${tm}分${ts}秒</text>
+            <text x="140" y="154" text-anchor="middle" fill="#9CA3AF" font-size="12">合計</text>`;
+  document.getElementById('pieSvg').innerHTML = paths;
+
+  document.getElementById('sTable').innerHTML = keys.map(k => {
+    const c = colorOf(k);
+    const s = totals[k];
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return `
+    <div class="s-row">
+      <div class="s-dot" style="background:${c.color}"></div>
+      <div class="s-name">${escHtml(nameOf(k))}</div>
+      <div class="s-cnt">${counts[k]}件</div>
+      <div class="s-val">
+        <div class="s-t">${m}分${sec}秒</div>
+        <div class="s-p">${(s/total*100).toFixed(1)}%</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('sTot').textContent = `${tm}分${ts}秒`;
+}
+
+/* ── Tooltip ── */
+const tip = document.getElementById('tip');
+document.addEventListener('mousemove', e => {
+  let x = e.clientX+16, y = e.clientY-10;
+  const tw = tip.offsetWidth||200, th = tip.offsetHeight||80;
+  if (x+tw > window.innerWidth-8) x = e.clientX-tw-12;
+  if (y+th > window.innerHeight-8) y = e.clientY-th-8;
+  tip.style.left = x+'px'; tip.style.top = y+'px';
+});
+document.addEventListener('mouseover', e => {
+  const bar = e.target.closest('.g-bar');
+  if (!bar) return;
+  const lbl = bar.dataset.label;
+  const cat = bar.dataset.cat;
+  const desc = bar.dataset.desc;
+  const improvement = bar.dataset.improvement;
+  const s = +bar.dataset.start, en = +bar.dataset.end;
+  const catKey = cat === '正味' ? 'seimi' : cat === '付随' ? 'fuzui' : cat === 'ムダ' ? 'muda' : null;
+  const c = catKey ? CATEGORY_COLORS[catKey] : getColorForLabel(lbl);
+  document.getElementById('tip-cat').textContent = cat || lbl;
+  document.getElementById('tip-cat').style.background = c.lt;
+  document.getElementById('tip-cat').style.color = c.dk;
+  document.getElementById('tip-name').textContent = desc || '';
+  document.getElementById('tip-time').textContent = `⏱ ${mmss1(s)} → ${mmss1(en)}`;
+  document.getElementById('tip-dur').textContent = improvement ? `💡 ${improvement}` : `⌛ ${durStr(en-s)}`;
+  tip.classList.add('on');
+});
+document.addEventListener('mouseout', e => {
+  if (e.target.closest('.g-bar')) tip.classList.remove('on');
+});
+
+/* ── Alpine.js app ── */
+function app() {
   return {
+    screen: 'upload',
     jobId: null,
+    currentFilename: '',
     segments: [],
-    currentLabel: '',
+    currentSegIdx: -1,
+    _labelColorIdx: {},
 
     init() {
-      // アップロード後に job_id を受け取る
-      window.addEventListener('job-registered', (e) => {
+      window.addEventListener('job-registered', e => {
         this.jobId = e.detail;
       });
-      // 分析結果のセグメント一覧を受け取る
-      window.addEventListener('segments-loaded', (e) => {
-        this.segments = e.detail;
+      window.addEventListener('analysis-started', e => {
+        this.currentFilename = e.detail || '';
+        this.screen = 'processing';
       });
-      // タイムライン行クリック → シーク
-      window.addEventListener('seek-to', (e) => {
+      window.addEventListener('analysis-done', () => {
+        this.screen = 'results';
+      });
+      window.addEventListener('segments-loaded', e => {
+        _colorMap = {};
+        this._labelColorIdx = {};
+        this.segments = e.detail;
+        buildGantt(e.detail);
+        buildStats(e.detail);
+        requestAnimationFrame(updatePh);
+      });
+      window.addEventListener('seek-to', e => {
         this.seekTo(e.detail);
       });
     },
 
+    goUpload() {
+      this.screen = 'upload';
+      clearVideoSel();
+    },
+
+    getColor(label) {
+      if (this._labelColorIdx[label] === undefined) {
+        const idx = Object.keys(this._labelColorIdx).length % CAT_COLORS.length;
+        this._labelColorIdx[label] = idx;
+      }
+      return CAT_COLORS[this._labelColorIdx[label]];
+    },
+
+    getCatColor(seg) {
+      if (seg.category && window.CATEGORY_COLORS && window.CATEGORY_COLORS[seg.category])
+        return window.CATEGORY_COLORS[seg.category];
+      return this.getColor(seg.label);
+    },
+
+    fmtTime(s) {
+      return `${Math.floor(s/60)}:${String((s%60).toFixed(1)).padStart(4,'0')}`;
+    },
+
     onTimeUpdate() {
       const t = this.$refs.video?.currentTime ?? 0;
-      // 現在時刻に対応するセグメントを探してハイライト
-      const current = this.segments.find(s => t >= s.start_sec && t < s.end_sec);
-      this.currentLabel = current ? current.label : '';
-
-      document.querySelectorAll('.seg-row').forEach(row => {
-        const start = parseFloat(row.dataset.start);
-        const end = parseFloat(row.dataset.end);
-        if (t >= start && t < end) {
-          row.classList.add('active');
-          row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        } else {
-          row.classList.remove('active');
-        }
+      _curSec = t;
+      updatePh();
+      const idx = this.segments.findIndex(s => t >= s.start_sec && t < s.end_sec);
+      this.currentSegIdx = idx;
+      document.querySelectorAll('.t-item').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+        if (i === idx) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       });
     },
 
@@ -116,6 +574,5 @@ function videoApp() {
   };
 }
 </script>
-
 </body>
 </html>

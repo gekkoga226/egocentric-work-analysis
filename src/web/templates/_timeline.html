@@ -1,28 +1,31 @@
 <div class="timeline-header">
   <h3>タイムライン — {{ seg_list.video_id }}</h3>
 
-  <!-- Track A/B 切替タブ -->
   <div class="track-tabs">
+    <button hx-get="/results/{{ job_id }}?track=std"
+            hx-target="#timeline-content" hx-swap="innerHTML"
+            class="tab {% if track == 'std' %}active{% endif %}">
+      Track STD (CLIP+Gemini)
+    </button>
     <button hx-get="/results/{{ job_id }}?track=b"
-            hx-target="#timeline-content"
-            hx-swap="innerHTML"
+            hx-target="#timeline-content" hx-swap="innerHTML"
             class="tab {% if track == 'b' %}active{% endif %}">
       Track B (CLIP)
     </button>
     <button hx-get="/results/{{ job_id }}?track=a"
-            hx-target="#timeline-content"
-            hx-swap="innerHTML"
+            hx-target="#timeline-content" hx-swap="innerHTML"
             class="tab {% if track == 'a' %}active{% endif %}">
-      Track A (Gemini)
+      Track A (Gemini単発)
     </button>
   </div>
 </div>
 
-<!-- セグメントテーブル -->
-<table class="seg-table"
-       hx-on:htmx:after-settle="window.dispatchEvent(new CustomEvent('segments-loaded', {detail: {{ segments_dicts | tojson }}}))">
+<table class="seg-table">
   <thead>
-    <tr><th>開始</th><th>終了</th><th>作業ラベル</th><th>信頼度</th></tr>
+    <tr>
+      <th>開始</th><th>終了</th><th>作業ラベル</th>
+      <th>分類</th><th>信頼度</th>
+    </tr>
   </thead>
   <tbody>
     {% for seg in seg_list.segments %}
@@ -30,20 +33,31 @@
         data-start="{{ seg.start_sec }}"
         data-end="{{ seg.end_sec }}"
         onclick="window.dispatchEvent(new CustomEvent('seek-to', {detail: {{ seg.start_sec }}}))"
-        title="クリックでシーク">
+        title="{{ seg.description or '' }}">
       <td>{{ '%02d:%05.2f' | format(seg.start_sec // 60, seg.start_sec % 60) }}</td>
       <td>{{ '%02d:%05.2f' | format(seg.end_sec // 60, seg.end_sec % 60) }}</td>
       <td class="label-cell">{{ seg.label }}</td>
+      <td class="cat-cell cat-{{ seg.category or 'none' }}">
+        {% if seg.category == 'seimi' %}正味
+        {% elif seg.category == 'fuzui' %}付随
+        {% elif seg.category == 'muda' %}ムダ
+        {% else %}—
+        {% endif %}
+      </td>
       <td>{{ '%.2f' | format(seg.confidence) }}</td>
     </tr>
+    {% if seg.improvement %}
+    <tr class="seg-improvement">
+      <td colspan="5">💡 {{ seg.improvement }}</td>
+    </tr>
+    {% endif %}
     {% endfor %}
   </tbody>
 </table>
 
-<!-- 評価指標テーブル（正解アノテーションがある場合のみ） -->
 {% if metrics %}
 <div class="metrics-section">
-  <h4>📊 評価指標（正解アノテーションとの比較）</h4>
+  <h4>評価指標（正解アノテーションとの比較）</h4>
   <table class="metrics-table">
     <thead>
       <tr><th>F1@10</th><th>F1@25</th><th>F1@50</th><th>Edit</th><th>Acc</th></tr>
@@ -60,3 +74,11 @@
   </table>
 </div>
 {% endif %}
+
+<!-- Fire segments-loaded after DOM insertion so Gantt/stats build from this data -->
+<script>
+(function() {
+  var segs = {{ segments_dicts | tojson }};
+  window.dispatchEvent(new CustomEvent('segments-loaded', { detail: segs }));
+})();
+</script>
