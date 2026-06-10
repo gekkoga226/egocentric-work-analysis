@@ -22,6 +22,7 @@ dependencies = [
     "pdfplumber>=0.11",
     "PyMuPDF>=1.24",
     "Pillow>=10.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

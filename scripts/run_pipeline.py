@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Run zero-shot action segmentation on a video file."""
+from dotenv import load_dotenv
+load_dotenv()
+
 import typer
 from src.pipeline.ingest import extract_frames
 from src.pipeline.embed import embed_frames
