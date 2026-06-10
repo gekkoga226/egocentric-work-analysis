@@ -248,9 +248,10 @@ def _normalize_label(label: str, vocabulary: list[str]) -> str:
         return label
     normalized = _LABEL_SYNONYMS.get(label)
     if normalized:
+        if normalized not in vocabulary:
+            vocabulary.append(normalized)
         return normalized
-    if label not in vocabulary:
-        vocabulary.append(label)
+    vocabulary.append(label)
     return label
 
 

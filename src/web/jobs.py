@@ -117,7 +117,7 @@ async def start_pipeline(
     reference_context: str | None = None,
     hints: list | None = None,
 ) -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.run_in_executor(
         _executor, _run_pipeline,
         job_id, video_path, label_list, track, output_dir,

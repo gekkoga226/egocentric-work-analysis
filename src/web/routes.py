@@ -79,7 +79,7 @@ async def upload_pdf(
             f.write(chunk)
 
     # Parse reference context in thread (non-blocking for the event loop)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     ref_ctx = await loop.run_in_executor(None, _parse_pdf_safe, str(pdf_dest))
     ids.store_ref_context(job_id, ref_ctx)
 
@@ -116,7 +116,7 @@ async def propose_labels_endpoint(
     video_path = ids.get_video_path(job_id)
     ref_ctx = ids.get_ref_context(job_id)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     labels = await loop.run_in_executor(None, _propose_safe, str(video_path), ref_ctx)
     labels_csv = ", ".join(labels) if labels else ""
     return HTMLResponse(content=f'<span id="proposedLabels" data-labels="{labels_csv}">{labels_csv}</span>')
