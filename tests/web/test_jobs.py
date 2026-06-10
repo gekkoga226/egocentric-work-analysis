@@ -74,3 +74,19 @@ def test_run_pipeline_sets_error_on_exception(tmp_path, monkeypatch):
     job = jobs_module.get_status(job_id)
     assert job["status"] == "error"
     assert "forced error" in job["error"]
+
+
+def test_track_runners_registry_has_required_tracks():
+    from src.web.jobs import TRACK_RUNNERS, _init_runners
+    _init_runners()
+    assert "b" in TRACK_RUNNERS
+    assert "a" in TRACK_RUNNERS
+    assert "std" in TRACK_RUNNERS
+
+
+def test_register_stores_track():
+    from src.web import jobs
+    jobs.register("j1", "std")
+    status = jobs.get_status("j1")
+    assert status["track"] == "std"
+    jobs._jobs.clear()
