@@ -2,7 +2,8 @@
 import tempfile
 import pytest
 import numpy as np
-from unittest.mock import patch
+import json
+from unittest.mock import patch, MagicMock
 from src.schemas import SegmentList, Segment
 from src.pipeline.label_zeroshot import label_zeroshot
 from src.pipeline.report import save_segments, to_timeline_markdown
@@ -53,3 +54,52 @@ def test_track_b_end_to_end(mock_ingest, mock_embed_f, mock_embed_t, synthetic_v
 
     md = to_timeline_markdown(result)
     assert "作業A" in md and "作業B" in md and "作業C" in md
+
+
+def _gemini_resp(segs):
+    m = MagicMock()
+    m.text = json.dumps(segs)
+    return m
+
+
+@patch("src.pipeline.label_gemini.genai")
+def test_track_std_pipeline_produces_valid_segment_list(mock_genai, synthetic_video_path, tmp_path):
+    from src.pipeline.ingest import extract_frames
+    from src.pipeline.embed import embed_frames
+    from src.pipeline.presegment import detect_boundaries
+    from src.pipeline.label_gemini import label_gemini
+    from src.pipeline.aggregate import aggregate
+    from src.schemas import SegmentList
+
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _gemini_resp([
+        {"start_sec": 0.0, "end_sec": 10.0, "label": "部品取り出し",
+         "category": "fuzui", "description": "棚から取る", "improvement": None, "confidence": 0.9},
+        {"start_sec": 10.0, "end_sec": 20.0, "label": "ネジ締め",
+         "category": "seimi", "description": "4本締結", "improvement": None, "confidence": 0.95},
+        {"start_sec": 20.0, "end_sec": 30.0, "label": "手待ち",
+         "category": "muda", "description": "次工程待ち", "improvement": "同期化で削減可", "confidence": 0.8},
+    ])
+
+    import os
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        frames = extract_frames(synthetic_video_path, fps=1.0)
+        timestamps, embeddings = embed_frames(frames)
+        boundaries = detect_boundaries(timestamps, embeddings, penalty=10.0)
+        seg_list = label_gemini(synthetic_video_path, ["部品取り出し", "ネジ締め", "手待ち"], boundaries)
+
+    # Invariant: continuous, non-overlapping, covers [0, total_duration]
+    assert seg_list.segments[0].start_sec == pytest.approx(0.0, abs=0.1)
+    for i in range(len(seg_list.segments) - 1):
+        a, b = seg_list.segments[i], seg_list.segments[i + 1]
+        assert a.end_sec <= b.start_sec + 0.01, f"Gap/overlap between seg {i} and {i+1}"
+
+    # Aggregate works without error
+    stats = aggregate(seg_list)
+    assert stats["total_sec"] > 0
+    assert "by_category" in stats
+
+    # Enrich fields present
+    cats = {s.category for s in seg_list.segments if s.category}
+    assert cats <= {"seimi", "fuzui", "muda"}

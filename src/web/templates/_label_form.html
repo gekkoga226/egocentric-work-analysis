@@ -1,43 +1,151 @@
-<section class="card">
-  <h2>② ラベル入力 &amp; 実行</h2>
-  <p class="filename">📹 {{ filename }}</p>
+<!-- 動画選択済み表示 -->
+<div class="lf-divider"></div>
 
-  <form hx-post="/analyze"
-        hx-target="#timeline-content"
+<!-- 任意: 作業標準書 PDF -->
+<div class="up-section">
+  <div class="up-section-label">
+    <span class="up-badge up-badge-opt">任意</span>
+    作業標準書（PDF）
+    <span class="up-section-hint">ラベル生成・分析精度の向上に使用します</span>
+  </div>
+  <form id="pdfForm"
+        hx-post="/upload-pdf"
+        hx-target="#pdfParseStatus"
         hx-swap="innerHTML"
-        hx-indicator="#analyze-spin"
-        hx-on:htmx:before-send="window.dispatchEvent(new CustomEvent('job-registered', {detail: '{{ job_id }}'}))">
-
+        hx-encoding="multipart/form-data">
     <input type="hidden" name="job_id" value="{{ job_id }}">
-
-    <label>
-      作業ラベル（カンマ区切り）
-      <input type="text" name="labels" placeholder="部品取り出し,ネジ締め,検査,梱包" required class="input-full">
-    </label>
-
-    <label>
-      Track
-      <select name="track" class="input-full">
-        <option value="b">Track B（CLIP・API不要）</option>
-        <option value="a">Track A（Gemini・APIキー必要）</option>
-        <option value="both">両方を比較</option>
-      </select>
-    </label>
-
-    <details class="advanced">
-      <summary>詳細オプション</summary>
-      <label>サンプリング FPS
-        <input type="number" name="fps" value="1.0" step="0.5" min="0.1" max="5.0" class="input-short">
-      </label>
-      <label>変化点 Penalty（Track B）
-        <input type="number" name="penalty" value="10.0" step="1.0" min="1.0" class="input-short">
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" name="blur_faces" value="true"> 顔ぼかし（プライバシー保護）
-      </label>
-    </details>
-
-    <button type="submit" class="btn-primary">🚀 分析開始</button>
-    <span id="analyze-spin" class="htmx-indicator">分析中…</span>
+    <div class="pdf-drop-zone" id="pdfDropZone" onclick="document.getElementById('pdfInput').click()">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="2" width="16" height="20" rx="2" stroke="#9CA3AF" stroke-width="1.5" fill="#F9FAFB"/>
+        <path d="M8 8h8M8 12h8M8 16h5" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      <span class="pdf-drop-text">PDFをドラッグ、または<em>ファイルを選択</em></span>
+      <input type="file" id="pdfInput" name="pdf" accept="application/pdf" style="display:none"
+             onchange="handlePdfSel(this); this.closest('form').requestSubmit()">
+    </div>
+    <div class="up-selected up-selected-pdf" id="pdfSelected" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2">
+        <rect x="4" y="2" width="16" height="20" rx="2"/>
+        <path d="M8 8h8M8 12h8M8 16h5" stroke-linecap="round"/>
+      </svg>
+      <span class="up-sel-name" id="pdfSelectedName"></span>
+      <span id="pdfParseStatus"></span>
+      <button type="button" class="up-sel-clear" onclick="clearPdfSel()">✕</button>
+    </div>
   </form>
-</section>
+</div>
+
+<!-- 分析設定フォーム -->
+<form hx-post="/analyze"
+      hx-target="#procStatus"
+      hx-swap="innerHTML"
+      hx-indicator="#analyzeSpin"
+      hx-on:htmx:before-send="
+        window.dispatchEvent(new CustomEvent('job-registered', {detail: '{{ job_id }}'}));
+        window.dispatchEvent(new CustomEvent('analysis-started', {detail: '{{ filename }}'}));
+      ">
+  <input type="hidden" name="job_id" value="{{ job_id }}">
+
+  <label class="lf-label">
+    作業ラベル（カンマ区切り）
+    <input type="text" name="labels"
+           placeholder="部品取り出し,ネジ締め,検査,梱包"
+           required class="lf-input">
+  </label>
+
+  <label class="lf-label">
+    Track
+    <select name="track" class="lf-input">
+      <option value="std">標準（CLIP境界 + Gemini精緻化・推奨）</option>
+      <option value="b">Track B（CLIPのみ・API不要）</option>
+      <option value="a">Track A（Gemini単発）</option>
+      <option value="both">B と A を比較</option>
+    </select>
+  </label>
+
+  <details class="lf-advanced">
+    <summary>詳細オプション</summary>
+    <div>
+      <div class="lf-adv-row">
+        サンプリング FPS
+        <input type="number" name="fps" value="1.0" step="0.5" min="0.1" max="5.0" class="lf-adv-input">
+      </div>
+      <div class="lf-adv-row">
+        変化点 Penalty（Track B）
+        <input type="number" name="penalty" value="10.0" step="1.0" min="1.0" class="lf-adv-input">
+      </div>
+      <div class="lf-adv-row" style="gap:6px">
+        <input type="checkbox" name="blur_faces" value="true" id="blurFaces">
+        <label for="blurFaces" style="margin:0;font-size:12px;color:#374151">顔ぼかし（プライバシー保護）</label>
+      </div>
+    </div>
+  </details>
+
+  <button type="submit" class="start-btn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="5 3 19 12 5 21 5 3"/>
+    </svg>
+    分析開始
+  </button>
+  <span id="analyzeSpin" class="htmx-indicator lf-spin" style="display:none;margin-top:8px;text-align:center;width:100%">送信中...</span>
+</form>
+
+<script>
+/* PDF upload helpers (upload screen, label form step) */
+function handlePdfSel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const dz = document.getElementById('pdfDropZone');
+  const sel = document.getElementById('pdfSelected');
+  const nm = document.getElementById('pdfSelectedName');
+  if (dz) dz.style.display = 'none';
+  if (sel) sel.style.display = 'flex';
+  if (nm) nm.textContent = file.name;
+}
+function clearPdfSel() {
+  const pi = document.getElementById('pdfInput');
+  if (pi) pi.value = '';
+  const dz = document.getElementById('pdfDropZone');
+  const sel = document.getElementById('pdfSelected');
+  if (dz) dz.style.display = '';
+  if (sel) sel.style.display = 'none';
+}
+/* PDF drop */
+(function() {
+  const pz = document.getElementById('pdfDropZone');
+  if (!pz) return;
+  ['dragover','dragenter'].forEach(ev =>
+    pz.addEventListener(ev, e => { e.preventDefault(); pz.classList.add('drag'); }));
+  ['dragleave','dragend'].forEach(ev =>
+    pz.addEventListener(ev, () => pz.classList.remove('drag')));
+  pz.addEventListener('drop', e => {
+    e.preventDefault();
+    pz.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') {
+      try {
+        const dt = new DataTransfer(); dt.items.add(file);
+        document.getElementById('pdfInput').files = dt.files;
+      } catch(_) {}
+      handlePdfSel(document.getElementById('pdfInput'));
+    }
+  });
+})();
+/* Vocab auto-proposal: non-blocking prefill of the labels input */
+(function() {
+  const labelInput = document.querySelector('input[name="labels"]');
+  if (!labelInput) return;
+  fetch('/propose-labels', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'job_id=' + encodeURIComponent('{{ job_id }}'),
+  })
+  .then(r => r.text())
+  .then(html => {
+    const m = html.match(/data-labels="([^"]*)"/);
+    // Only prefill if the user hasn't typed anything yet
+    if (m && m[1] && !labelInput.value.trim()) labelInput.value = m[1];
+  })
+  .catch(() => {});  /* proposal failure is silent — manual input always works */
+})();
+</script>

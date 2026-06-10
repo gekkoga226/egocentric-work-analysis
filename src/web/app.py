@@ -3,6 +3,9 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()  # プロジェクトルートの .env を自動読み込み
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 

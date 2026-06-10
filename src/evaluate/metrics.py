@@ -57,6 +57,46 @@ def compute_all(pred: SegmentList, gt: SegmentList, fps: float = 1.0) -> dict[st
     }
 
 
+def boundary_deviation_log(
+    pred: SegmentList,
+    gt: SegmentList,
+) -> dict[str, list[float]]:
+    """Return per-boundary deviation between pred and gt boundary timestamps.
+
+    NOTE: track_std's Gemini boundary refinement may move boundaries 1-2s from the
+    annotator's physical timestamps to IE-logical positions (e.g., 'tool touch = start').
+    A lower F1@10 vs track_b does NOT necessarily mean worse quality — sample-review
+    the video to verify logical correctness before drawing conclusions.
+    """
+    pred_bounds = sorted({s.start_sec for s in pred.segments} | {s.end_sec for s in pred.segments})
+    gt_bounds   = sorted({s.start_sec for s in gt.segments}   | {s.end_sec for s in gt.segments})
+
+    deviations: dict[str, list[float]] = {
+        "matched_deviations": [],   # |pred_b - nearest_gt_b| for matched pairs
+        "unmatched_pred": [],       # pred boundaries with no gt within 50s
+        "unmatched_gt": [],         # gt boundaries with no pred within 50s
+    }
+
+    gt_used = set()
+    for pb in pred_bounds:
+        candidates = [(abs(pb - gb), i) for i, gb in enumerate(gt_bounds) if i not in gt_used]
+        if not candidates:
+            deviations["unmatched_pred"].append(pb)
+            continue
+        dist, idx = min(candidates)
+        if dist <= 50.0:
+            deviations["matched_deviations"].append(dist)
+            gt_used.add(idx)
+        else:
+            deviations["unmatched_pred"].append(pb)
+
+    for i, gb in enumerate(gt_bounds):
+        if i not in gt_used:
+            deviations["unmatched_gt"].append(gb)
+
+    return deviations
+
+
 def _levenshtein(a: list[str], b: list[str]) -> int:
     m, n = len(a), len(b)
     dp = list(range(n + 1))

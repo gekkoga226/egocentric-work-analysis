@@ -11,6 +11,10 @@ from pathlib import Path
 # { job_id: Path(video_path) }
 _registry: dict[str, Path] = {}
 
+# 登録済み job_id → reference_context のマッピング
+# { job_id: context_string or None }
+_ref_contexts: dict[str, str | None] = {}
+
 
 def _sanitize(name: str) -> str:
     """ファイル名から拡張子を除き、安全な文字のみに絞る。"""
@@ -41,3 +45,13 @@ def is_registered(job_id: str) -> bool:
 def all_job_ids() -> list[str]:
     """登録済みの全 job_id を返す。"""
     return list(_registry.keys())
+
+
+def store_ref_context(job_id: str, context: str | None) -> None:
+    """job_id に対応する reference_context を保存する。"""
+    _ref_contexts[job_id] = context
+
+
+def get_ref_context(job_id: str) -> str | None:
+    """job_id に対応する reference_context を取得する。未登録なら None。"""
+    return _ref_contexts.get(job_id)

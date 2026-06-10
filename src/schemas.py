@@ -1,6 +1,7 @@
 # src/schemas.py
 from dataclasses import dataclass, asdict
 import json
+from typing import Optional
 
 
 @dataclass
@@ -9,6 +10,17 @@ class Segment:
     end_sec: float
     label: str
     confidence: float = 1.0
+    category: Optional[str] = None      # "seimi" | "fuzui" | "muda"
+    description: Optional[str] = None   # what is observed (factual)
+    improvement: Optional[str] = None   # kaizen hint (muda/fuzui only)
+
+
+@dataclass
+class Hint:
+    label: str
+    frame_sec: float
+    bbox: Optional[tuple] = None        # normalized (x, y, w, h); None = whole frame
+    note: Optional[str] = None
 
 
 @dataclass
@@ -17,7 +29,7 @@ class SegmentList:
     fps_sampled: float
     label_vocabulary: list[str]
     segments: list[Segment]
-    source: str  # "track_a" | "track_b" | "ground_truth" | "ollo"
+    source: str  # "track_std" | "track_a" | "track_b" | "ground_truth" | "ollo"
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -26,11 +38,14 @@ class SegmentList:
     @classmethod
     def from_json(cls, s: str) -> "SegmentList":
         d = json.loads(s)
-        d["segments"] = [Segment(**seg) for seg in d["segments"]]
+        known = set(Segment.__dataclass_fields__)
+        d["segments"] = [
+            Segment(**{k: v for k, v in seg.items() if k in known})
+            for seg in d["segments"]
+        ]
         return cls(**d)
 
     def to_frame_labels(self, total_duration: float, fps: float = 1.0) -> list[str]:
-        """Convert to frame-level label list at given fps."""
         n = int(total_duration * fps)
         labels = ["background"] * n
         for seg in self.segments:

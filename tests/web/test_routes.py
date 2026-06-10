@@ -153,3 +153,74 @@ def test_video_returns_206_for_range_request(tmp_path):
     resp = client.get("/video/vid_ok", headers={"Range": "bytes=0-99"})
     assert resp.status_code == 206
     assert len(resp.content) == 100
+
+
+def test_upload_pdf_attaches_to_job(tmp_path):
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    with patch("src.web.routes._parse_pdf_safe", return_value="parsed context"):
+        resp = client.post(
+            "/upload-pdf",
+            data={"job_id": job_id},
+            files={"pdf": ("manual.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+    assert resp.status_code == 200
+    assert ids_module.get_ref_context(job_id) == "parsed context"
+
+
+def test_upload_pdf_unregistered_job_returns_404():
+    resp = client.post(
+        "/upload-pdf",
+        data={"job_id": "ghost"},
+        files={"pdf": ("m.pdf", b"%PDF", "application/pdf")},
+    )
+    assert resp.status_code == 404
+
+
+def test_upload_pdf_rejects_non_pdf():
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    resp = client.post(
+        "/upload-pdf",
+        data={"job_id": job_id},
+        files={"pdf": ("evil.exe", b"MZ", "application/octet-stream")},
+    )
+    assert resp.status_code == 400
+
+
+def test_analyze_accepts_hints_json(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    with patch.object(jobs_module, "start_pipeline", new=AsyncMock()) as mock_start:
+        resp = client.post(
+            "/analyze",
+            data={
+                "job_id": job_id, "labels": "A,B", "track": "b",
+                "hints": '[{"label": "ドライバー", "frame_sec": 12.3}]',
+            },
+        )
+    assert resp.status_code == 200
+
+
+def test_propose_labels_unregistered_job_returns_404():
+    resp = client.post("/propose-labels", data={"job_id": "ghost"})
+    assert resp.status_code == 404
+
+
+def test_propose_labels_no_api_key_returns_error(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    resp = client.post("/propose-labels", data={"job_id": job_id})
+    assert resp.status_code == 200
+    assert b"GEMINI_API_KEY" in resp.content
+
+
+def test_analyze_track_std_without_api_key_returns_error(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    resp = client.post("/analyze", data={"job_id": job_id, "labels": "A,B", "track": "std"})
+    assert resp.status_code == 200
+    assert b"GEMINI_API_KEY" in resp.content

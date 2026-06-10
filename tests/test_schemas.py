@@ -56,3 +56,55 @@ def test_to_frame_labels_gap_is_background():
     assert labels[0] == "background"
     assert labels[2] == "A"
     assert labels[5] == "background"
+
+
+def test_segment_has_enrich_fields():
+    seg = Segment(0.0, 10.0, "ネジ締め", 0.9,
+                  category="seimi",
+                  description="フランジを締結",
+                  improvement=None)
+    assert seg.category == "seimi"
+    assert seg.description == "フランジを締結"
+    assert seg.improvement is None
+
+
+def test_segment_enrich_defaults_to_none():
+    seg = Segment(0.0, 10.0, "A", 1.0)
+    assert seg.category is None
+    assert seg.description is None
+    assert seg.improvement is None
+
+
+def test_segmentlist_roundtrip_with_enrich():
+    sl = SegmentList(
+        video_id="test", fps_sampled=1.0,
+        label_vocabulary=["ネジ締め"],
+        segments=[Segment(0.0, 10.0, "ネジ締め", 0.9, "seimi", "締結作業", None)],
+        source="track_std",
+    )
+    sl2 = SegmentList.from_json(sl.to_json())
+    assert sl2.segments[0].category == "seimi"
+    assert sl2.segments[0].description == "締結作業"
+    assert sl2.segments[0].improvement is None
+
+
+def test_from_json_backward_compat_old_json():
+    old_json = json.dumps({
+        "video_id": "old", "fps_sampled": 1.0,
+        "label_vocabulary": ["A"],
+        "segments": [{"start_sec": 0.0, "end_sec": 5.0, "label": "A", "confidence": 0.8}],
+        "source": "track_b",
+    })
+    sl = SegmentList.from_json(old_json)
+    assert sl.segments[0].category is None
+    assert sl.segments[0].description is None
+    assert sl.segments[0].improvement is None
+
+
+def test_hint_dataclass():
+    from src.schemas import Hint
+    h = Hint(label="ドライバー", frame_sec=12.3)
+    assert h.bbox is None
+    assert h.note is None
+    h2 = Hint(label="手", frame_sec=5.0, bbox=(0.1, 0.2, 0.3, 0.4), note="右手")
+    assert h2.bbox == (0.1, 0.2, 0.3, 0.4)
