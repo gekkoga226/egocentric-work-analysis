@@ -6,6 +6,7 @@ from src.pipeline.embed import embed_frames
 from src.pipeline.presegment import detect_boundaries
 from src.pipeline.label_zeroshot import label_zeroshot
 from src.pipeline.label_vlm_single import label_vlm_single
+from src.pipeline.label_gemini import label_gemini
 from src.pipeline.report import save_segments, to_timeline_markdown
 
 app = typer.Typer(help="Egocentric work analysis pipeline")
@@ -16,7 +17,7 @@ def run(
     video: str = typer.Argument(..., help="Path to input video file"),
     labels: str = typer.Argument(..., help="Comma-separated action label vocabulary"),
     output_dir: str = typer.Option("results", help="Directory for output JSON files"),
-    track: str = typer.Option("both", help="Which track to run: a | b | both"),
+    track: str = typer.Option("both", help="Which track to run: std | a | b | both | all"),
     fps: float = typer.Option(1.0, help="Frames per second to sample"),
     blur_faces: bool = typer.Option(False, help="Apply face blur for privacy"),
     penalty: float = typer.Option(10.0, help="Change-point detection penalty (Track B)"),
@@ -25,7 +26,22 @@ def run(
     typer.echo(f"Video: {video}")
     typer.echo(f"Labels ({len(label_list)}): {label_list}")
 
-    if track in ("b", "both"):
+    if track in ("std", "all"):
+        typer.echo("\n── Track STD (CLIP boundaries + Gemini refinement) ──")
+        frames = extract_frames(video, fps=fps, blur_faces=blur_faces)
+        typer.echo(f"  Extracted {len(frames)} frames")
+        timestamps, embeddings = embed_frames(frames)
+        boundaries = detect_boundaries(timestamps, embeddings, penalty=penalty)
+        typer.echo(f"  Boundaries: {[f'{b:.1f}s' for b in boundaries]}")
+        seg_list = label_gemini(
+            video, label_list, boundaries,
+            blur_faces=blur_faces, raw_output_dir=output_dir,
+        )
+        path = save_segments(seg_list, output_dir)
+        typer.echo(f"  Saved: {path}")
+        typer.echo(to_timeline_markdown(seg_list))
+
+    if track in ("b", "both", "all"):
         typer.echo("\n── Track B (staged pipeline) ──")
         frames = extract_frames(video, fps=fps, blur_faces=blur_faces)
         typer.echo(f"  Extracted {len(frames)} frames")
@@ -41,7 +57,7 @@ def run(
         typer.echo(f"  Saved: {path}")
         typer.echo(to_timeline_markdown(seg_list))
 
-    if track in ("a", "both"):
+    if track in ("a", "both", "all"):
         typer.echo("\n── Track A (Gemini single-pass) ──")
         seg_list = label_vlm_single(video, label_list, blur_faces=blur_faces)
         path = save_segments(seg_list, output_dir)
