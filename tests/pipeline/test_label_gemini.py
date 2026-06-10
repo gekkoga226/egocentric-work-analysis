@@ -1,5 +1,7 @@
 # tests/pipeline/test_label_gemini.py
+import json
 import pytest
+from unittest.mock import MagicMock, patch
 from src.schemas import Segment
 from src.pipeline.label_gemini import (
     _build_coarse_segments,
@@ -107,3 +109,89 @@ def test_stitch_no_duplicate_intervals():
     # No time range should appear twice
     for i in range(len(result) - 1):
         assert result[i].end_sec <= result[i+1].start_sec + 0.01
+
+
+# ── Integration tests (with Gemini mocked) ────────────────────────────────────
+
+def _gemini_response(segments: list[dict]) -> MagicMock:
+    m = MagicMock()
+    m.text = json.dumps(segments)
+    return m
+
+
+@patch("src.pipeline.label_gemini.genai")
+def test_label_gemini_returns_segment_list(mock_genai, synthetic_video_path):
+    from src.pipeline.label_gemini import label_gemini
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _gemini_response([
+        {"start_sec": 0.0, "end_sec": 15.0, "label": "ネジ締め",
+         "category": "seimi", "description": "締結中", "improvement": None, "confidence": 0.9},
+        {"start_sec": 15.0, "end_sec": 30.0, "label": "部品取り出し",
+         "category": "fuzui", "description": "棚から取る", "improvement": None, "confidence": 0.85},
+    ])
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        result = label_gemini(synthetic_video_path, ["ネジ締め", "部品取り出し"], [10.0, 20.0])
+    from src.schemas import SegmentList
+    assert isinstance(result, SegmentList)
+    assert result.source == "track_std"
+    assert len(result.segments) >= 1
+    assert result.segments[0].category in ("seimi", "fuzui", "muda", None)
+
+
+@patch("src.pipeline.label_gemini.genai")
+def test_label_gemini_category_normalization(mock_genai, synthetic_video_path):
+    from src.pipeline.label_gemini import label_gemini
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _gemini_response([
+        {"start_sec": 0.0, "end_sec": 30.0, "label": "A",
+         "category": "value-adding", "description": "d", "improvement": None, "confidence": 0.9},
+    ])
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        result = label_gemini(synthetic_video_path, ["A"], [])
+    assert result.segments[0].category == "seimi"
+
+
+@patch("src.pipeline.label_gemini.genai")
+def test_label_gemini_out_of_vocab_label_appended(mock_genai, synthetic_video_path):
+    from src.pipeline.label_gemini import label_gemini
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _gemini_response([
+        {"start_sec": 0.0, "end_sec": 30.0, "label": "新ラベル",
+         "category": "muda", "description": "d", "improvement": "改善", "confidence": 0.7},
+    ])
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        result = label_gemini(synthetic_video_path, ["既存ラベル"], [])
+    assert "新ラベル" in result.label_vocabulary
+
+
+@patch("src.pipeline.label_gemini.genai")
+def test_label_gemini_synonym_normalization(mock_genai, synthetic_video_path):
+    from src.pipeline.label_gemini import label_gemini
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _gemini_response([
+        {"start_sec": 0.0, "end_sec": 30.0, "label": "待機",
+         "category": "muda", "description": "d", "improvement": None, "confidence": 0.8},
+    ])
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+        result = label_gemini(synthetic_video_path, ["手待ち"], [])
+    # "待機" → normalized to "手待ち" via _LABEL_SYNONYMS
+    assert result.segments[0].label == "手待ち"
+
+
+def test_normalize_label_synonym():
+    from src.pipeline.label_gemini import _normalize_label
+    vocab = ["手待ち"]
+    assert _normalize_label("待機", vocab) == "手待ち"
+    assert _normalize_label("手待ち", vocab) == "手待ち"
+
+
+def test_normalize_label_out_of_vocab_appended():
+    from src.pipeline.label_gemini import _normalize_label
+    vocab = ["A"]
+    result = _normalize_label("新作業", vocab)
+    assert result == "新作業"
+    assert "新作業" in vocab
