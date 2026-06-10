@@ -14,19 +14,22 @@
 
 | Action | Path | Purpose |
 |---|---|---|
+| Modify | `pyproject.toml` | add pdfplumber / PyMuPDF / Pillow deps |
 | Modify | `src/schemas.py` | Segment += category/description/improvement; Hint dataclass |
 | Create | `src/pipeline/aggregate.py` | by_category + by_label stats |
 | Modify | `src/pipeline/report.py` | enrich fields in procedure markdown |
-| Create | `src/pipeline/label_gemini.py` | Stage 2 CLIP+Gemini track_std |
-| Create | `src/pipeline/parse_reference.py` | PDF → reference_context |
+| Create | `src/pipeline/label_gemini.py` | Stage 2 CLIP+Gemini track_std (module-level genai import for mockability) |
+| Create | `src/pipeline/parse_reference.py` | PDF → reference_context (module-level imports for mockability) |
 | Create | `src/pipeline/propose_labels.py` | Vocabulary auto-suggestion |
 | Modify | `src/web/ids.py` | _ref_contexts store |
 | Modify | `src/web/jobs.py` | TRACK_RUNNERS registry + track_std branch |
-| Modify | `src/web/routes.py` | PDF in /upload, /propose-labels, track std/both |
+| Modify | `src/web/routes.py` | /upload-pdf, /propose-labels, track std/both, hints receiver |
+| Modify | `src/web/templates/_label_form.html` | track std option (default), PDF zone → /upload-pdf, vocab prefill |
 | Modify | `src/web/templates/_timeline.html` | segments-loaded fix + enrich fields + track_std tab |
-| Modify | `src/web/templates/index.html` | category colors, description/improvement in Gantt tooltip + sidebar |
+| Modify | `src/web/templates/index.html` | category colors, description/improvement in Gantt tooltip + sidebar, category stats |
 | Modify | `src/web/static/app.css` | category color vars |
 | Modify | `src/evaluate/metrics.py` | boundary deviation log |
+| Modify | `scripts/run_pipeline.py` | --track std support |
 | Modify | `tests/test_schemas.py` | new field round-trip + backward compat |
 | Create | `tests/pipeline/test_aggregate.py` | aggregate unit tests |
 | Modify | `tests/pipeline/test_report.py` | enrich fields tests |
@@ -34,7 +37,42 @@
 | Create | `tests/pipeline/test_parse_reference.py` | parse_reference tests |
 | Create | `tests/pipeline/test_propose_labels.py` | propose_labels tests |
 | Modify | `tests/web/test_routes.py` | PDF upload, propose-labels, track std tests |
+| Modify | `tests/evaluate/test_metrics.py` | boundary_deviation_log tests |
 | Modify | `tests/test_integration.py` | track_std with mocked Gemini |
+
+**Mocking convention (critical):** All external libraries that tests patch (`genai`, `pdfplumber`, `fitz`, `Image`) MUST be imported at **module level** in the source files — function-local imports bypass `unittest.mock.patch("module.attr")` and the mocks will not take effect. Follow the existing pattern in `src/pipeline/label_vlm_single.py` (line 7: `from google import genai` at top).
+
+---
+
+## Task 0: Dependencies
+
+**Files:**
+- Modify: `pyproject.toml`
+
+- [ ] **Step 1: Add PDF/image dependencies**
+
+In `pyproject.toml`, add to the `dependencies` list after `"python-multipart>=0.0.9",`:
+
+```toml
+    "pdfplumber>=0.11",
+    "PyMuPDF>=1.24",
+    "Pillow>=10.0",
+```
+
+- [ ] **Step 2: Install and verify imports**
+
+```
+pip install -e ".[dev]"
+python -c "import pdfplumber, fitz, PIL; print('OK')"
+```
+Expected: `OK`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add pyproject.toml
+git commit -m "build: add pdfplumber, PyMuPDF, Pillow for PDF reference parsing"
+```
 
 ---
 
@@ -609,6 +647,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
+from google import genai  # module-level: tests patch src.pipeline.label_gemini.genai
 
 from src.schemas import Hint, Segment, SegmentList
 from src.pipeline.ingest import _blur_faces as _do_blur_faces
@@ -660,8 +699,8 @@ def label_gemini(
     reference_context: str | None = None,
     model: str = _GEMINI_MODEL,
     source: str = "track_std",
+    raw_output_dir: str = "results",
 ) -> SegmentList:
-    from google import genai
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     cap = cv2.VideoCapture(video_path)
@@ -700,8 +739,8 @@ def label_gemini(
         all_raw.append({"window": win_idx, "win_start": win_start, "win_end": win_end, "raw": raw_text})
 
     # Persist raw responses for reproducibility
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
+    results_dir = Path(raw_output_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
     (results_dir / f"{video_id}_{source}_raw.json").write_text(
         json.dumps(all_raw, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -988,7 +1027,7 @@ def _gemini_response(segments: list[dict]) -> MagicMock:
     return m
 
 
-@patch("src.pipeline.label_gemini.genai", create=True)
+@patch("src.pipeline.label_gemini.genai")
 def test_label_gemini_returns_segment_list(mock_genai, synthetic_video_path):
     from src.pipeline.label_gemini import label_gemini
     mock_client = MagicMock()
@@ -1008,7 +1047,7 @@ def test_label_gemini_returns_segment_list(mock_genai, synthetic_video_path):
     assert result.segments[0].category in ("seimi", "fuzui", "muda", None)
 
 
-@patch("src.pipeline.label_gemini.genai", create=True)
+@patch("src.pipeline.label_gemini.genai")
 def test_label_gemini_category_normalization(mock_genai, synthetic_video_path):
     from src.pipeline.label_gemini import label_gemini
     mock_client = MagicMock()
@@ -1022,7 +1061,7 @@ def test_label_gemini_category_normalization(mock_genai, synthetic_video_path):
     assert result.segments[0].category == "seimi"
 
 
-@patch("src.pipeline.label_gemini.genai", create=True)
+@patch("src.pipeline.label_gemini.genai")
 def test_label_gemini_out_of_vocab_label_appended(mock_genai, synthetic_video_path):
     from src.pipeline.label_gemini import label_gemini
     mock_client = MagicMock()
@@ -1036,7 +1075,7 @@ def test_label_gemini_out_of_vocab_label_appended(mock_genai, synthetic_video_pa
     assert "新ラベル" in result.label_vocabulary
 
 
-@patch("src.pipeline.label_gemini.genai", create=True)
+@patch("src.pipeline.label_gemini.genai")
 def test_label_gemini_synonym_normalization(mock_genai, synthetic_video_path):
     from src.pipeline.label_gemini import label_gemini
     mock_client = MagicMock()
@@ -1201,6 +1240,12 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+# Module-level imports: tests patch src.pipeline.parse_reference.{pdfplumber,fitz,Image,genai}
+import pdfplumber
+import fitz  # PyMuPDF
+from PIL import Image
+from google import genai
+
 logger = logging.getLogger(__name__)
 
 MAX_PDF_IMAGE_PAGES = 10
@@ -1234,8 +1279,6 @@ def parse_reference(pdf_path: str, *, model: str = _GEMINI_MODEL) -> Optional[st
 
 
 def _parse_sync(pdf_path: str, *, model: str) -> Optional[str]:
-    import pdfplumber
-
     try:
         with pdfplumber.open(pdf_path) as pdf:
             texts = [p.extract_text() or "" for p in pdf.pages]
@@ -1250,10 +1293,6 @@ def _parse_sync(pdf_path: str, *, model: str) -> Optional[str]:
 
 def _image_fallback(pdf_path: str, *, model: str) -> Optional[str]:
     try:
-        import fitz  # PyMuPDF
-        from PIL import Image
-        from google import genai
-
         doc = fitz.open(pdf_path)
         n_pages = min(len(doc), MAX_PDF_IMAGE_PAGES)
         if n_pages < len(doc):
@@ -1391,6 +1430,9 @@ import os
 from typing import Optional
 
 import cv2
+from google import genai  # module-level: tests patch src.pipeline.propose_labels.genai
+
+from src.pipeline.ingest import _blur_faces as _do_blur_faces
 
 logger = logging.getLogger(__name__)
 
@@ -1409,11 +1451,8 @@ def propose_labels(
     """Sample frames from video and ask Gemini to suggest work operation labels.
     Returns empty list on any failure (non-blocking)."""
     try:
-        from google import genai
-        from src.pipeline.ingest import _blur_faces as do_blur
-
         client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        frames = _sample_frames(video_path, blur_faces, do_blur)
+        frames = _sample_frames(video_path, blur_faces, _do_blur_faces)
         if not frames:
             return []
 
@@ -1622,6 +1661,7 @@ def _run_pipeline(
     fps: float,
     penalty: float,
     reference_context: str | None = None,
+    hints: list | None = None,
 ) -> None:
     try:
         _jobs[job_id]["status"] = "running"
@@ -1636,7 +1676,7 @@ def _run_pipeline(
             seg_list = runner(
                 str(video_path), label_list,
                 fps=fps, penalty=penalty, blur_faces=blur_faces,
-                reference_context=reference_context,
+                reference_context=reference_context, hints=hints,
             )
             from src.pipeline.report import save_segments
             save_segments(seg_list, str(output_dir))
@@ -1660,12 +1700,13 @@ async def start_pipeline(
     fps: float = 1.0,
     penalty: float = 10.0,
     reference_context: str | None = None,
+    hints: list | None = None,
 ) -> None:
     loop = asyncio.get_event_loop()
     loop.run_in_executor(
         _executor, _run_pipeline,
         job_id, video_path, label_list, track, output_dir,
-        blur_faces, fps, penalty, reference_context,
+        blur_faces, fps, penalty, reference_context, hints,
     )
 ```
 
@@ -1685,27 +1726,67 @@ git commit -m "feat: add TRACK_RUNNERS registry to jobs.py; add track_std; ids.p
 
 ---
 
-## Task 9: routes.py — PDF Upload, /propose-labels, track_std
+## Task 9: routes.py — /upload-pdf, /propose-labels, track_std, hints receiver
 
 **Files:**
 - Modify: `src/web/routes.py`
 - Modify: `tests/web/test_routes.py`
+
+> **Why a separate `/upload-pdf` endpoint:** the video form auto-submits on file selection
+> (`requestSubmit()` in `index.html`), so the PDF — chosen later in `_label_form.html` —
+> can never ride in the same multipart request. The PDF is attached *after* the video
+> upload, keyed by `job_id`.
 
 - [ ] **Step 1: Write failing tests**
 
 Add to `tests/web/test_routes.py`:
 
 ```python
-def test_upload_with_pdf_returns_200(tmp_path):
-    fake_video = b"fake mp4"
-    fake_pdf = b"%PDF-1.4 fake"
+def test_upload_pdf_attaches_to_job(tmp_path):
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    with patch("src.web.routes._parse_pdf_safe", return_value="parsed context"):
+        resp = client.post(
+            "/upload-pdf",
+            data={"job_id": job_id},
+            files={"pdf": ("manual.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+    assert resp.status_code == 200
+    assert ids_module.get_ref_context(job_id) == "parsed context"
+
+
+def test_upload_pdf_unregistered_job_returns_404():
     resp = client.post(
-        "/upload",
-        files={
-            "file": ("video.mp4", fake_video, "video/mp4"),
-            "pdf":  ("manual.pdf", fake_pdf, "application/pdf"),
-        },
+        "/upload-pdf",
+        data={"job_id": "ghost"},
+        files={"pdf": ("m.pdf", b"%PDF", "application/pdf")},
     )
+    assert resp.status_code == 404
+
+
+def test_upload_pdf_rejects_non_pdf():
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    resp = client.post(
+        "/upload-pdf",
+        data={"job_id": job_id},
+        files={"pdf": ("evil.exe", b"MZ", "application/octet-stream")},
+    )
+    assert resp.status_code == 400
+
+
+def test_analyze_accepts_hints_json(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    client.post("/upload", files={"file": ("v.mp4", b"d", "video/mp4")})
+    job_id = list(ids_module.all_job_ids())[-1]
+    with patch.object(jobs_module, "start_pipeline", new=AsyncMock()) as mock_start:
+        resp = client.post(
+            "/analyze",
+            data={
+                "job_id": job_id, "labels": "A,B", "track": "b",
+                "hints": '[{"label": "ドライバー", "frame_sec": 12.3}]',
+            },
+        )
     assert resp.status_code == 200
 
 
@@ -1735,9 +1816,9 @@ def test_analyze_track_std_without_api_key_returns_error(monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```
-pytest tests/web/test_routes.py::test_upload_with_pdf_returns_200 -v
+pytest tests/web/test_routes.py::test_upload_pdf_attaches_to_job -v
 ```
-Expected: `FAILED — 422 Unprocessable Entity` (PDF field not accepted yet)
+Expected: `FAILED — 404 Not Found` (/upload-pdf route does not exist yet)
 
 - [ ] **Step 3: Rewrite `src/web/routes.py`**
 
@@ -1778,7 +1859,6 @@ async def index(request: Request) -> HTMLResponse:
 async def upload(
     request: Request,
     file: UploadFile = File(...),
-    pdf: Optional[UploadFile] = File(None),
 ) -> HTMLResponse:
     suffix = Path(file.filename).suffix.lower()
     if suffix not in _ALLOWED_VIDEO_EXT:
@@ -1795,27 +1875,41 @@ async def upload(
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
     ids._registry[job_id] = dest
-
-    # Optional PDF
-    if pdf and pdf.filename and pdf.filename.endswith(".pdf"):
-        pdf_dest = _VIDEOS_DIR / f"{job_id}_ref.pdf"
-        with pdf_dest.open("wb") as f:
-            while chunk := await pdf.read(1024 * 1024):
-                f.write(chunk)
-        # Parse reference context in thread (non-blocking)
-        loop = asyncio.get_event_loop()
-        ref_ctx = await loop.run_in_executor(
-            None, _parse_pdf_safe, str(pdf_dest)
-        )
-        ids.store_ref_context(job_id, ref_ctx)
-    else:
-        ids.store_ref_context(job_id, None)
+    ids.store_ref_context(job_id, None)
 
     return templates.TemplateResponse(
         request=request,
         name="_label_form.html",
         context={"job_id": job_id, "filename": file.filename},
     )
+
+
+@router.post("/upload-pdf", response_class=HTMLResponse)
+async def upload_pdf(
+    request: Request,
+    job_id: str = Form(...),
+    pdf: UploadFile = File(...),
+) -> HTMLResponse:
+    """Attach a work-standard PDF to an already-uploaded video job."""
+    if not ids.is_registered(job_id):
+        return HTMLResponse(content="<p class='error'>未登録の job_id です。</p>", status_code=404)
+
+    if not (pdf.filename and pdf.filename.lower().endswith(".pdf")):
+        return HTMLResponse(content="<p class='error'>PDFファイルを選択してください。</p>", status_code=400)
+
+    _VIDEOS_DIR.mkdir(exist_ok=True)
+    pdf_dest = _VIDEOS_DIR / f"{job_id}_ref.pdf"
+    with pdf_dest.open("wb") as f:
+        while chunk := await pdf.read(1024 * 1024):
+            f.write(chunk)
+
+    # Parse reference context in thread (non-blocking for the event loop)
+    loop = asyncio.get_event_loop()
+    ref_ctx = await loop.run_in_executor(None, _parse_pdf_safe, str(pdf_dest))
+    ids.store_ref_context(job_id, ref_ctx)
+
+    status = "✓ 参照文脈を抽出しました" if ref_ctx else "⚠ テキスト抽出に失敗（PDFなしで分析を続行できます）"
+    return HTMLResponse(content=f'<span class="pdf-parse-status">{status}</span>')
 
 
 def _parse_pdf_safe(pdf_path: str) -> Optional[str]:
@@ -1870,9 +1964,22 @@ async def analyze(
     fps: float = Form(1.0),
     penalty: float = Form(10.0),
     blur_faces: bool = Form(False),
+    hints: Optional[str] = Form(None),   # extension receiver: JSON array of Hint dicts
 ) -> HTMLResponse:
     if not ids.is_registered(job_id):
         return HTMLResponse(content="<p class='error'>不明な job_id です。</p>", status_code=404)
+
+    # Parse hints (extension point — passed through to label_gemini, no UI yet)
+    hint_list = None
+    if hints:
+        try:
+            import json as _json
+            from src.schemas import Hint
+            raw = _json.loads(hints)
+            hint_list = [Hint(**{k: v for k, v in h.items()
+                                 if k in Hint.__dataclass_fields__}) for h in raw]
+        except Exception:
+            hint_list = None  # malformed hints are ignored, not fatal
 
     needs_gemini = track in _GEMINI_TRACKS or track == "both"
     if needs_gemini and not os.environ.get("GEMINI_API_KEY"):
@@ -1905,6 +2012,7 @@ async def analyze(
         fps=fps,
         penalty=penalty,
         reference_context=reference_context,
+        hints=hint_list,
     )
 
     return templates.TemplateResponse(
@@ -1942,10 +2050,10 @@ async def results(request: Request, job_id: str, track: str = "std") -> HTMLResp
     if not ids.is_registered(job_id):
         return HTMLResponse(content="<p class='error'>未登録の job_id です。</p>", status_code=404)
 
+    if track == "both":
+        track = "b"  # "both" runs b+a; default the results view to b (tabs switch to a)
+
     result_path = _RESULTS_DIR / f"{job_id}_track_{track}.json"
-    if not result_path.exists():
-        # Fallback: try track_b for backward compat
-        result_path = _RESULTS_DIR / f"{job_id}_{track}.json"
     if not result_path.exists():
         return HTMLResponse(
             content=f"<p class='error'>結果ファイルが見つかりません: track={track}</p>",
@@ -2104,7 +2212,90 @@ Replace `src/web/templates/_timeline.html` entirely:
 </script>
 ```
 
-- [ ] **Step 2: Update `index.html` — category colors for Gantt + tooltip + sidebar**
+- [ ] **Step 2: Update `_label_form.html` — track std, PDF wiring, vocab prefill**
+
+Three changes in `src/web/templates/_label_form.html`:
+
+**(a) Track select — `std` becomes the first/default option:**
+
+Replace the existing `<select name="track" ...>` block with:
+
+```html
+<select name="track" class="lf-input">
+  <option value="std">標準（CLIP境界 + Gemini精緻化・推奨）</option>
+  <option value="b">Track B（CLIPのみ・API不要）</option>
+  <option value="a">Track A（Gemini単発）</option>
+  <option value="both">B と A を比較</option>
+</select>
+```
+
+**(b) PDF zone — wire to `/upload-pdf` (currently cosmetic):**
+
+Replace the PDF section (`<div class="up-section">` ... `</div>` containing `pdfDropZone`) with an htmx form:
+
+```html
+<div class="up-section">
+  <div class="up-section-label">
+    <span class="up-badge up-badge-opt">任意</span>
+    作業標準書（PDF）
+    <span class="up-section-hint">ラベル生成・分析精度の向上に使用します</span>
+  </div>
+  <form id="pdfForm"
+        hx-post="/upload-pdf"
+        hx-target="#pdfParseStatus"
+        hx-swap="innerHTML"
+        hx-encoding="multipart/form-data">
+    <input type="hidden" name="job_id" value="{{ job_id }}">
+    <div class="pdf-drop-zone" id="pdfDropZone" onclick="document.getElementById('pdfInput').click()">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="2" width="16" height="20" rx="2" stroke="#9CA3AF" stroke-width="1.5" fill="#F9FAFB"/>
+        <path d="M8 8h8M8 12h8M8 16h5" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      <span class="pdf-drop-text">PDFをドラッグ、または<em>ファイルを選択</em></span>
+      <input type="file" id="pdfInput" name="pdf" accept="application/pdf" style="display:none"
+             onchange="handlePdfSel(this); this.closest('form').requestSubmit()">
+    </div>
+    <div class="up-selected up-selected-pdf" id="pdfSelected" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2">
+        <rect x="4" y="2" width="16" height="20" rx="2"/>
+        <path d="M8 8h8M8 12h8M8 16h5" stroke-linecap="round"/>
+      </svg>
+      <span class="up-sel-name" id="pdfSelectedName"></span>
+      <span id="pdfParseStatus"></span>
+      <button type="button" class="up-sel-clear" onclick="clearPdfSel()">✕</button>
+    </div>
+  </form>
+</div>
+```
+
+(The existing `handlePdfSel` / `clearPdfSel` / drag-drop JS in the same file stays as-is —
+only the `onchange` gains `requestSubmit()` and the zone is wrapped in the htmx form.)
+
+**(c) Vocab prefill — fire `/propose-labels` when the form loads, fill the labels input:**
+
+Add at the end of the `<script>` block in `_label_form.html`:
+
+```javascript
+/* Vocab auto-proposal: non-blocking prefill of the labels input */
+(function() {
+  const labelInput = document.querySelector('input[name="labels"]');
+  if (!labelInput) return;
+  fetch('/propose-labels', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'job_id=' + encodeURIComponent('{{ job_id }}'),
+  })
+  .then(r => r.text())
+  .then(html => {
+    const m = html.match(/data-labels="([^"]*)"/);
+    // Only prefill if the user hasn't typed anything yet
+    if (m && m[1] && !labelInput.value.trim()) labelInput.value = m[1];
+  })
+  .catch(() => {});  /* proposal failure is silent — manual input always works */
+})();
+```
+
+- [ ] **Step 3: Update `index.html` — category colors for Gantt + tooltip + sidebar**
 
 In `index.html`, replace the `getColorForLabel` and `buildGantt` sections:
 
@@ -2244,7 +2435,75 @@ getCatColor(seg) {
 
 And add `window.CATEGORY_COLORS = CATEGORY_COLORS;` right after `const CATEGORY_COLORS = {...}`.
 
-- [ ] **Step 3: Add category CSS to `app.css`**
+Finally, replace `buildStats` so the donut chart is **category-based when categories exist**
+(spec §7.1: カテゴリ別円グラフ), falling back to label-based for track_b:
+
+```javascript
+function buildStats(segments) {
+  if (!segments.length) return;
+  const hasCategories = segments.some(s => s.category);
+  const CAT_NAMES = {seimi: '正味作業', fuzui: '付随作業', muda: 'ムダ作業'};
+
+  // Group either by category (enriched tracks) or by label (track_b fallback)
+  const keyOf  = s => hasCategories ? (s.category || 'unknown') : s.label;
+  const nameOf = k => hasCategories ? (CAT_NAMES[k] || '未分類') : k;
+  const colorOf = k => hasCategories
+    ? (CATEGORY_COLORS[k] || {color:'#6B7280', lt:'#F3F4F6', dk:'#374151'})
+    : getColorForLabel(k);
+
+  const totals = {}, counts = {};
+  segments.forEach(seg => {
+    const k = keyOf(seg);
+    const d = seg.end_sec - seg.start_sec;
+    totals[k] = (totals[k] || 0) + d;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  const total = Object.values(totals).reduce((a, b) => a + b, 0);
+  const keys = Object.keys(totals);
+
+  // Donut
+  const cx=140, cy=140, R=118, ri=66;
+  let a = -Math.PI/2, paths = '';
+  keys.forEach(k => {
+    const c = colorOf(k);
+    const sl = totals[k] / total;
+    const ae = a + sl * Math.PI * 2;
+    const [x1,y1]=[cx+R*Math.cos(a), cy+R*Math.sin(a)];
+    const [x2,y2]=[cx+R*Math.cos(ae),cy+R*Math.sin(ae)];
+    const [xi1,yi1]=[cx+ri*Math.cos(a), cy+ri*Math.sin(a)];
+    const [xi2,yi2]=[cx+ri*Math.cos(ae),cy+ri*Math.sin(ae)];
+    const lg = sl > .5 ? 1 : 0;
+    const mid = a + sl*Math.PI, mr = (R+ri)/2;
+    paths += `<path d="M${xi1},${yi1} L${x1},${y1} A${R},${R} 0 ${lg},1 ${x2},${y2} L${xi2},${yi2} A${ri},${ri} 0 ${lg},0 ${xi1},${yi1}Z" fill="${c.color}" stroke="#fff" stroke-width="3"/>`;
+    if (sl > .05) paths += `<text x="${(cx+mr*Math.cos(mid)).toFixed(1)}" y="${(cy+mr*Math.sin(mid)).toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="13" font-weight="800">${(sl*100).toFixed(0)}%</text>`;
+    a = ae;
+  });
+  const tm = Math.floor(total/60), ts = Math.floor(total%60);
+  paths += `<text x="140" y="134" text-anchor="middle" fill="#374151" font-size="16" font-weight="800">${tm}分${ts}秒</text>
+            <text x="140" y="154" text-anchor="middle" fill="#9CA3AF" font-size="12">合計</text>`;
+  document.getElementById('pieSvg').innerHTML = paths;
+
+  // Table (category rows when enriched, label rows otherwise)
+  document.getElementById('sTable').innerHTML = keys.map(k => {
+    const c = colorOf(k);
+    const s = totals[k];
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return `
+    <div class="s-row">
+      <div class="s-dot" style="background:${c.color}"></div>
+      <div class="s-name">${escHtml(nameOf(k))}</div>
+      <div class="s-cnt">${counts[k]}件</div>
+      <div class="s-val">
+        <div class="s-t">${m}分${sec}秒</div>
+        <div class="s-p">${(s/total*100).toFixed(1)}%</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('sTot').textContent = `${tm}分${ts}秒`;
+}
+```
+
+- [ ] **Step 4: Add category CSS to `app.css`**
 
 Add after existing `.tag` rules:
 
@@ -2263,9 +2522,12 @@ Add after existing `.tag` rules:
   padding: 2px 8px 4px 20px;
   border-bottom: 1px solid #E9D5FF;
 }
+
+/* PDF parse status in selected chip */
+.pdf-parse-status { font-size: 11px; color: #15803D; margin-left: 6px; }
 ```
 
-- [ ] **Step 4: Manual verification**
+- [ ] **Step 5: Manual verification**
 
 ```
 uvicorn src.web.app:app --reload
@@ -2274,13 +2536,15 @@ uvicorn src.web.app:app --reload
 Then open `http://localhost:8000`, upload a video, run Track B, and confirm:
 - Gantt chart populates after analysis completes
 - Bars use label-hash colors (track_b has no category)
-- Check track selector shows STD / B / A tabs
+- Stats donut groups by label (track_b fallback)
+- Track selector shows STD / B / A tabs
+- Track select in label form defaults to 標準（std）
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/web/templates/_timeline.html src/web/templates/index.html src/web/static/app.css
-git commit -m "fix: Gantt segments-loaded script tag; add category colors + enrich display"
+git add src/web/templates/_label_form.html src/web/templates/_timeline.html src/web/templates/index.html src/web/static/app.css
+git commit -m "fix: Gantt segments-loaded script tag; category colors, stats, PDF wiring, vocab prefill"
 ```
 
 ---
@@ -2317,8 +2581,11 @@ def boundary_deviation_log(
 
     gt_used = set()
     for pb in pred_bounds:
-        nearest = min((abs(pb - gb), i) for i, gb in enumerate(gt_bounds) if i not in gt_used)
-        dist, idx = nearest if nearest else (float("inf"), -1)
+        candidates = [(abs(pb - gb), i) for i, gb in enumerate(gt_bounds) if i not in gt_used]
+        if not candidates:
+            deviations["unmatched_pred"].append(pb)
+            continue
+        dist, idx = min(candidates)
         if dist <= 50.0:
             deviations["matched_deviations"].append(dist)
             gt_used.add(idx)
@@ -2332,17 +2599,54 @@ def boundary_deviation_log(
     return deviations
 ```
 
-- [ ] **Step 2: Verify existing tests still pass**
+- [ ] **Step 2: Add tests for boundary_deviation_log**
+
+Add to `tests/evaluate/test_metrics.py`:
+
+```python
+def test_boundary_deviation_log_matched(ground_truth_segments, perfect_prediction):
+    from src.evaluate.metrics import boundary_deviation_log
+    dev = boundary_deviation_log(perfect_prediction, ground_truth_segments)
+    # perfect prediction → every deviation is 0
+    assert all(d == 0.0 for d in dev["matched_deviations"])
+    assert dev["unmatched_pred"] == []
+    assert dev["unmatched_gt"] == []
+
+
+def test_boundary_deviation_log_empty_gt():
+    from src.evaluate.metrics import boundary_deviation_log
+    from src.schemas import Segment, SegmentList
+    pred = SegmentList("v", 1.0, ["A"], [Segment(0.0, 10.0, "A", 1.0)], "track_std")
+    gt = SegmentList("v", 1.0, ["A"], [], "ground_truth")
+    dev = boundary_deviation_log(pred, gt)
+    # no gt boundaries → all pred boundaries unmatched, no crash
+    assert len(dev["unmatched_pred"]) == 2  # 0.0 and 10.0
+
+
+def test_boundary_deviation_log_shifted_boundary(ground_truth_segments):
+    from src.evaluate.metrics import boundary_deviation_log
+    from src.schemas import Segment, SegmentList
+    import copy
+    pred = copy.deepcopy(ground_truth_segments)
+    pred.source = "track_std"
+    # shift one boundary by 2s (Gemini IE-logical correction scenario)
+    pred.segments[0] = Segment(0.0, 12.0, "作業A", 1.0)
+    pred.segments[1] = Segment(12.0, 20.0, "作業B", 1.0)
+    dev = boundary_deviation_log(pred, ground_truth_segments)
+    assert any(abs(d - 2.0) < 0.01 for d in dev["matched_deviations"])
+```
+
+- [ ] **Step 3: Run tests**
 
 ```
 pytest tests/evaluate/ -v
 ```
-Expected: all PASS (new function added, nothing removed)
+Expected: all PASS (existing + 3 new)
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/evaluate/metrics.py
+git add src/evaluate/metrics.py tests/evaluate/test_metrics.py
 git commit -m "feat: add boundary_deviation_log to evaluate/metrics for boundary drift diagnosis"
 ```
 
@@ -2361,6 +2665,8 @@ Add to `tests/test_integration.py`:
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _gemini_resp(segs):
     m = MagicMock()
@@ -2368,7 +2674,7 @@ def _gemini_resp(segs):
     return m
 
 
-@patch("src.pipeline.label_gemini.genai", create=True)
+@patch("src.pipeline.label_gemini.genai")
 def test_track_std_pipeline_produces_valid_segment_list(mock_genai, synthetic_video_path, tmp_path):
     from src.pipeline.ingest import extract_frames
     from src.pipeline.embed import embed_frames
@@ -2408,9 +2714,6 @@ def test_track_std_pipeline_produces_valid_segment_list(mock_genai, synthetic_vi
     # Enrich fields present
     cats = {s.category for s in seg_list.segments if s.category}
     assert cats <= {"seimi", "fuzui", "muda"}
-
-
-import pytest
 ```
 
 - [ ] **Step 2: Run all tests**
@@ -2429,27 +2732,90 @@ git commit -m "test: add track_std integration test covering stitch invariant + 
 
 ---
 
+## Task 13: CLI — run_pipeline.py track std
+
+**Files:**
+- Modify: `scripts/run_pipeline.py`
+
+- [ ] **Step 1: Add std branch to the CLI**
+
+In `scripts/run_pipeline.py`:
+
+1. Add import at top: `from src.pipeline.label_gemini import label_gemini`
+2. Update the `track` option help text: `help="Which track to run: std | a | b | both | all"`
+3. Add this branch **before** the existing Track B block (std reuses B's Stage 0/1 outputs):
+
+```python
+    if track in ("std", "all"):
+        typer.echo("\n── Track STD (CLIP boundaries + Gemini refinement) ──")
+        frames = extract_frames(video, fps=fps, blur_faces=blur_faces)
+        typer.echo(f"  Extracted {len(frames)} frames")
+        timestamps, embeddings = embed_frames(frames)
+        boundaries = detect_boundaries(timestamps, embeddings, penalty=penalty)
+        typer.echo(f"  Boundaries: {[f'{b:.1f}s' for b in boundaries]}")
+        seg_list = label_gemini(
+            video, label_list, boundaries,
+            blur_faces=blur_faces, raw_output_dir=output_dir,
+        )
+        path = save_segments(seg_list, output_dir)
+        typer.echo(f"  Saved: {path}")
+        typer.echo(to_timeline_markdown(seg_list))
+```
+
+4. Change the existing two conditions to also accept `"all"`:
+   - `if track in ("b", "both"):` → `if track in ("b", "both", "all"):`
+   - `if track in ("a", "both"):` → `if track in ("a", "both", "all"):`
+
+(`run_evaluate.py` needs no change — it keys predictions by `seg.source`, so
+`*_track_std.json` files flow through `compare_systems` automatically for 3-track comparison.)
+
+- [ ] **Step 2: Smoke-check the CLI parses**
+
+```
+python -c "import scripts.run_pipeline"
+```
+Expected: no ImportError
+
+- [ ] **Step 3: Run full test suite**
+
+```
+pytest tests/ -v --tb=short
+```
+Expected: all PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/run_pipeline.py
+git commit -m "feat: add --track std / all to run_pipeline CLI for 3-track benchmarking"
+```
+
+---
+
 ## Self-Review Checklist
 
 ### Spec Coverage
 - [x] §3.1 Segment enrich fields → Task 1
 - [x] §3.2 Category 3 values (seimi/fuzui/muda) → Task 4 `_CATEGORY_ALIASES`
-- [x] §3.3 Hint dataclass → Task 1
+- [x] §3.3 Hint dataclass → Task 1; /analyze hints receiver → Task 9
 - [x] §4.2 label_gemini (window alignment, stitch, invariant, normalization) → Tasks 4-5
 - [x] §4.2-5 J: label synonym normalization → Task 4 `_LABEL_SYNONYMS` + `_normalize_label`
 - [x] §4.2-6 K: enrich core-priority merge → Task 4 `_merge_adjacent_enrich`
+- [x] §4.2-7 reproducibility (raw responses, temperature=0) → Task 4 (`raw_output_dir`)
 - [x] §4.4 N: TRACK_RUNNERS registry → Task 8
-- [x] §5 propose_labels → Task 7
-- [x] §6 parse_reference + L guardrails → Task 6
-- [x] §7.1 aggregate → Task 2
+- [x] §5 propose_labels → Task 7; vocab prefill wiring → Task 10 Step 2(c)
+- [x] §6 parse_reference + L guardrails → Task 6; deps → Task 0
+- [x] §7.1 aggregate → Task 2; category stats UI → Task 10 buildStats
 - [x] §7.2 report update → Task 3
-- [x] §8.1 /upload PDF + /propose-labels + /analyze track_std → Task 9
+- [x] §8.1 /upload-pdf + /propose-labels + /analyze track_std + hints → Task 9
 - [x] §8.2 Gantt segments-loaded bug fix → Task 10
 - [x] §8.3 Category colors → Task 10
 - [x] §8.4 description/improvement display → Task 10
 - [x] §8.5 graceful degradation (track_b no enrich → label hash color) → Task 10
-- [x] §9.2 M: boundary deviation log → Task 11
-- [x] §11 test plan (all Gemini mocked) → Tasks 1-5, 7-9, 12
+- [x] §8.6 label form (std default, PDF wiring, vocab prefill) → Task 10 Step 2
+- [x] §9.2 M: boundary deviation log → Task 11 (with tests)
+- [x] §11 test plan (all Gemini mocked) → Tasks 1-5, 7-9, 11, 12
+- [x] 実装順序7: 評価/CLI 3トラック対応 → Task 13
 
 ### No Placeholders
 Reviewed — no TBD/TODO/placeholder steps found.
@@ -2459,6 +2825,11 @@ Reviewed — no TBD/TODO/placeholder steps found.
 - `_stitch` returns `list[Segment]` → `_merge_adjacent_enrich` accepts and returns same
 - `TRACK_RUNNERS["std"]` expects `(video_path, label_vocabulary, **opts)` → `_run_std` matches
 - `ids.get_ref_context` / `ids.store_ref_context` used in routes.py → added to ids.py in Task 8
+- `hints` flows: routes.analyze → jobs.start_pipeline → _run_pipeline → runner → label_gemini
+- `raw_output_dir` param: label_gemini default `"results"` matches web `_RESULTS_DIR`; CLI passes `output_dir`
+
+### Mocking Consistency (re-reviewed)
+- All patch targets (`src.pipeline.label_gemini.genai`, `src.pipeline.parse_reference.{pdfplumber,fitz,Image,genai}`, `src.pipeline.propose_labels.genai`) correspond to **module-level imports** in source — function-local imports would bypass the mocks (fixed in review)
 
 ---
 
